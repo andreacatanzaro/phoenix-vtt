@@ -1,0 +1,25 @@
+{
+  "name": "phoenix-vtt",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "dev": "docker compose up",
+    "test": "vitest run",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "coverage:content": "node scripts/coverage-content.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0",
+    "eslint-import-resolver-typescript": "4.4.5",
+    "eslint-plugin-boundaries": "7.4.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.0.5"
+  }
+}
