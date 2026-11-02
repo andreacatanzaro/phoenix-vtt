@@ -4,6 +4,7 @@ import { addEffect, advanceRounds, effectsFor, endEffectsOnEvent, modifierTotal,
 const shield = (over: Partial<ActiveEffect> = {}): ActiveEffect => ({
   id: "e1",
   key: "shield",
+  nameKey: "test.effect.shield",
   sourceId: "caster-1",
   targetId: "hero",
   power: 5,
@@ -53,6 +54,13 @@ describe("queries and expiry", () => {
     const effects = addEffect([], shield()).effects;
     expect(endEffectsOnEvent(effects, "turn.start")).toEqual([]);
     expect(endEffectsOnEvent(effects, "rest.long")).toHaveLength(1);
+  });
+
+  it("ends a creature-bound effect only on that creature's event", () => {
+    const bound = addEffect([], shield({ duration: { kind: "until-event", event: "turn.start", actorId: "hero" } })).effects;
+    expect(endEffectsOnEvent(bound, "turn.start", "villain")).toHaveLength(1);
+    expect(endEffectsOnEvent(bound, "turn.start", null)).toHaveLength(1);
+    expect(endEffectsOnEvent(bound, "turn.start", "hero")).toEqual([]);
   });
 
   it("is JSON serializable", () => {

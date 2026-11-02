@@ -1,12 +1,15 @@
 export type EffectDuration =
   | { kind: "permanent" }
   | { kind: "rounds"; remaining: number }
-  | { kind: "until-event"; event: string };
+  /** With `actorId`, ends only on an event whose payload `actorId` matches; without it, on any such event. */
+  | { kind: "until-event"; event: string; actorId?: string };
 
 export type ActiveEffect = {
   id: string;
   /** Identity of the effect itself (e.g. "shield"): same key + same source never stack. */
   key: string;
+  /** i18n key of the Italian display name; the engine never prints `key` to users. */
+  nameKey: string;
   sourceId: string;
   targetId: string;
   /** Provided by the rule that creates the effect; the higher one wins when they clash. */
@@ -38,9 +41,19 @@ export function modifierTotal(effects: readonly ActiveEffect[], targetId: string
     .reduce((acc, m) => acc + m.value, 0);
 }
 
-/** Returns the effects that remain once those lasting until `event` have ended. */
-export function endEffectsOnEvent(effects: readonly ActiveEffect[], event: string): ActiveEffect[] {
-  return effects.filter((e) => !(e.duration.kind === "until-event" && e.duration.event === event));
+/**
+ * Returns the effects that remain once those lasting until `event` have ended.
+ * `actorId` is the creature the event concerns (e.g. whose turn starts), if any.
+ */
+export function endEffectsOnEvent(
+  effects: readonly ActiveEffect[],
+  event: string,
+  actorId: string | null = null,
+): ActiveEffect[] {
+  return effects.filter((e) => {
+    if (e.duration.kind !== "until-event" || e.duration.event !== event) return true;
+    return e.duration.actorId !== undefined && e.duration.actorId !== actorId;
+  });
 }
 
 export function removeEffects(effects: readonly ActiveEffect[], ids: readonly string[]): ActiveEffect[] {

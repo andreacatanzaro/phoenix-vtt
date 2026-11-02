@@ -5,6 +5,11 @@ export type JsonObject = { [key: string]: JsonValue };
 export type LogLine = {
   key: string;
   params: Record<string, string | number | boolean>;
+  /**
+   * Params whose value is an internal reference, not display text: "text-key" is an i18n key
+   * (e.g. an effect's `nameKey`), "actor-id" is an actor id to be replaced by that actor's name.
+   */
+  refs?: Record<string, "text-key" | "actor-id">;
 };
 
 export type GameEvent = {
