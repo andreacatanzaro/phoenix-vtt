@@ -182,6 +182,7 @@ Un contenuto non ancora fornito dall'autore non si inventa: se serve un esempio 
 | Caratteristiche, vantaggio e svantaggio, azioni, iniziativa, attacchi e danni, condizioni, riposi, magia, spazio e taglie | Come SRD |
 | Morte | Come SRD (tiri salvezza contro morte, 3 successi o 3 fallimenti), ma **un 1 naturale al tiro salvezza contro morte uccide direttamente** |
 | 20 e 1 naturali | **20 naturale = successo critico, 1 naturale = fallimento critico su qualsiasi tiro d20** (prove, tiri salvezza, attacchi): successo e fallimento automatici, con segnalazione al DM. I tiri salvezza contro morte seguono la propria regola |
+| Colpo critico | Un attacco con **20 naturale** è un colpo critico: raddoppia il **numero di dadi** di danno **e anche i bonus ai danni** (modificatori e bonus fissi). Le resistenze e le vulnerabilità si applicano dopo il raddoppio |
 | Copertura | La assegna il DM a mano (parziale o totale, con i bonus alla CA); non si calcola dalla mappa |
 | Luce e visione | Automatiche, calcolate da muri, porte e luci dell'editor di scena (ondata dedicata) |
 | Veleni, malattie, trappole | Automatici: il motore applica danni e condizioni quando scattano; il DM può correggere |

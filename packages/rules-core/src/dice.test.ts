@@ -62,6 +62,20 @@ describe("rollDice", () => {
   });
 });
 
+describe("rollD20 modifier validation", () => {
+  it("rejects modifiers that are not whole, finite numbers within the limit", () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1.5, 1_000_001, -1_000_001]) {
+      expect(() => rollD20({ modifier: bad, mode: "normal" }, createScriptedRng([10])), String(bad)).toThrow();
+    }
+  });
+
+  it("does not consume any randomness when it rejects", () => {
+    const rng = createScriptedRng([10]);
+    expect(() => rollD20({ modifier: Number.NaN, mode: "normal" }, rng)).toThrow();
+    expect(rollD20({ modifier: 0, mode: "normal" }, rng).total).toBe(10);
+  });
+});
+
 describe("rollD20", () => {
   it("rolls one die without advantage", () => {
     const r = rollD20({ modifier: 5, mode: "normal" }, createScriptedRng([12]));

@@ -79,6 +79,9 @@ export function rollDice(notation: string, rng: Rng): RollResult {
 
 export function rollD20(options: { modifier: number; mode: RollMode }, rng: Rng): RollResult {
   const { modifier, mode } = options;
+  if (!Number.isSafeInteger(modifier) || Math.abs(modifier) > MAX_MODIFIER) {
+    throw new RangeError(`Modifier must be a whole number within ±${String(MAX_MODIFIER)}`);
+  }
   const count = mode === "normal" ? 1 : 2;
   const dice = Array.from({ length: count }, () => rng.int(1, 20));
   const kept = mode === "normal" ? [...dice] : keepDice(dice, { mode: mode === "advantage" ? "highest" : "lowest", n: 1 });
