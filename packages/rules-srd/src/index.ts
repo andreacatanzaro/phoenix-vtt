@@ -13,3 +13,6 @@ export * from "./conditions";
 export * from "./condition-rules";
 export * from "./condition-apply";
 export * from "./condition-movement";
+export * from "./death";
+export * from "./rest";
+export * from "./game-time";

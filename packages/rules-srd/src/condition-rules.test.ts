@@ -219,6 +219,7 @@ describe("exhaustion limits", () => {
     expect(effectiveHpMax(24, exhausted(4))).toBe(12);
     expect(effectiveHpMax(23, exhausted(3))).toBe(23);
     expect(effectiveHpMax(23, [])).toBe(23);
+    expect(effectiveHpMax(1, exhausted(4))).toBe(1);
   });
 
   it("kills at level 6 only", () => {

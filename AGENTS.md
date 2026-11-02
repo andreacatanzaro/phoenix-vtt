@@ -180,7 +180,7 @@ Un contenuto non ancora fornito dall'autore non si inventa: se serve un esempio 
 | Area | Cosa vale |
 | --- | --- |
 | Caratteristiche, vantaggio e svantaggio, azioni, iniziativa, attacchi e danni, condizioni, riposi, magia, spazio e taglie | Come SRD |
-| Morte | Come SRD (tiri salvezza contro morte, 3 successi o 3 fallimenti), ma **un 1 naturale al tiro salvezza contro morte uccide direttamente** |
+| Morte | Come SRD (tiri salvezza contro morte, 3 successi o 3 fallimenti), ma **un 1 naturale al tiro salvezza contro morte uccide direttamente**. I **personaggi e i loro compagni** fanno i tiri salvezza contro morte; i **PNG e i mostri non li fanno**: a 0 PF muoiono, salvo che il DM li attivi per una singola creatura. Una creatura **stabile** che subisce danno torna a fare i tiri salvezza contro morte, ripartendo da zero successi e zero fallimenti |
 | 20 e 1 naturali | **20 naturale = successo critico, 1 naturale = fallimento critico su qualsiasi tiro d20** (prove, tiri salvezza, attacchi): successo e fallimento automatici, con segnalazione al DM. I tiri salvezza contro morte seguono la propria regola. **L'iniziativa è esclusa**: un 20 o un 1 naturale non ha alcun effetto critico e conta solo il totale |
 | Colpo critico | Un attacco con **20 naturale** è un colpo critico: raddoppia il **numero di dadi** di danno **e anche i bonus ai danni** (modificatori e bonus fissi). Le resistenze e le vulnerabilità si applicano dopo il raddoppio |
 | Parità di iniziativa | Come SRD: i **giocatori** ordinano i propri personaggi in parità tra loro; il **DM** decide ogni parità che coinvolge una sua creatura. Il sistema segnala la parità e non la risolve da solo |
@@ -194,7 +194,7 @@ Un contenuto non ancora fornito dall'autore non si inventa: se serve un esempio 
 | Monete | 5 monete come SRD (cambio 1:10) |
 | Creazione dei punteggi | Tre metodi: serie standard, acquisto a punti, 4d6 scartando il più basso. Il tiro lo esegue il server e lo registra |
 | PF per livello | Livello 1: massimo del Dado Vita + mod. COS. Livelli successivi: il giocatore sceglie tra tiro e media fissa (arrotondata per eccesso); il tiro lo esegue il server e lo registra |
-| Arrotondamento dei PF massimi | Qualunque calcolo che modifica i PF massimi (per esempio il livello 4 di Indebolimento, che li dimezza) si arrotonda **sempre per difetto**, in qualsiasi contesto |
+| Arrotondamento dei PF massimi | Qualunque calcolo che modifica i PF massimi (per esempio il livello 4 di Indebolimento, che li dimezza) si arrotonda **sempre per difetto**, in qualsiasi contesto, ma **mai sotto 1**. Vale per le riduzioni e i ricalcoli; la media fissa dei PF per livello resta arrotondata per eccesso (riga "PF per livello") |
 | Aumenti e talenti | Ai livelli 4, 8, 12, 16 e 19 si sceglie tra aumento dei punteggi e talento |
 | Multiclasse | Come SRD. Il modello della scheda la prevede dal giorno uno, ma si implementa dopo il caso a classe singola |
 | Sintonia e ispirazione | Come SRD (massimo 3 oggetti sintonizzati; ispirazione assegnata dal DM) |
@@ -228,6 +228,8 @@ La mappa usa una griglia con caselle da 1,5 m. Il codice interno ragiona in **me
 ### Riposi e incantesimi preparati
 
 Quando il DM dichiara un riposo lungo durante la sessione, il sistema applica i recuperi (PF, Dadi Vita, slot) e **chiede a ogni giocatore** con incantesimi preparati se vuole cambiare la lista, nel rispetto delle regole SRD (numero massimo e incantesimi disponibili per la classe).
+
+**Orologio di gioco.** Il tempo delle regole (per esempio le 24 ore tra due riposi lunghi) è tempo **di gioco**, non reale. Appartiene al **mondo** ed è un numero intero di minuti dall'inizio del mondo. Lo fanno avanzare il DM e le azioni automatiche: un riposo breve dura almeno 60 minuti, uno lungo almeno 480. Un riposo lungo non ha effetto se il precedente è finito meno di 24 ore di gioco prima (il DM può ignorare l'intervallo). Il motore non legge mai l'orologio reale.
 
 ## 8. Server
 
@@ -275,6 +277,7 @@ Party ── AdventureJournal (diario dell'avventura, condiviso col party)
 ```
 
 - L'appartenenza al mondo è una tabella con ruolo, **non** un campo `dm_id`. Oggi ammette un solo DM; passare a più DM sarà una modifica di regola, non di schema.
+- Il mondo ha un **orologio di gioco** (`gameTime`, minuti interi). Ogni creatura ricorda quando è finito il suo ultimo riposo lungo.
 - La scheda ha **campi del giocatore** (aspetto e storia alla creazione, scelte di livello) e **campi del mondo** (livello, XP, oggetti, oro, risorse). Questi ultimi li modifica solo il DM o il sistema, sempre con una riga di storico.
 - Il modello prevede fin dall'inizio le **creature legate a un personaggio** (compagni, evocazioni, seguaci) e il **multiclasse** (più livelli di classe per personaggio, slot combinati).
 
@@ -345,3 +348,4 @@ Fuori dalle prime ondate: mappa del mondo, voce e video, più DM per mondo, down
 
 - Dettaglio del flusso "scelte di avanzamento in sospeso" (cosa può fare il personaggio finché non le completa).
 - Soglie di XP, classi, razze, talenti, incantesimi, oggetti, mostri: arrivano dall'autore.
+- **PF temporanei:** non sono ancora nel modello (`VitalState` ha solo PF e PF massimi). Vanno aggiunti con i primi contenuti che li concedono, rispettando le regole SRD (non si sommano, assorbono il danno per primi). **Da non dimenticare.**
