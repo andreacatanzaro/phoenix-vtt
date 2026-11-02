@@ -40,6 +40,30 @@ export const it = {
     wis: "Saggezza",
     cha: "Carisma",
   },
+  // Italian condition names, confirmed by the author.
+  conditions: {
+    blinded: "Accecato",
+    charmed: "Affascinato",
+    deafened: "Assordato",
+    exhaustion: "Indebolimento",
+    frightened: "Spaventato",
+    grappled: "Afferrato",
+    incapacitated: "Incapacitato",
+    invisible: "Invisibile",
+    paralyzed: "Paralizzato",
+    petrified: "Pietrificato",
+    poisoned: "Avvelenato",
+    prone: "Prono",
+    restrained: "Trattenuto",
+    stunned: "Stordito",
+    unconscious: "Privo di sensi",
+  },
+  // What the system leaves to the DM for each condition (proposed wording).
+  conditionNotices: {
+    "blinded.checks": "Accecato: fallisce da solo le prove che richiedono la vista. Lo applica il DM.",
+    "deafened.checks": "Assordato: fallisce da solo le prove che richiedono l'udito. Lo applica il DM.",
+    "frightened.sight": "Spaventato: svantaggio a prove e attacchi finché vede la fonte della paura. Il DM verifica la vista.",
+  },
   // Italian damage type names, confirmed by the author.
   damageTypes: {
     acid: "acido",
@@ -96,6 +120,10 @@ export const it = {
     },
     roll: {
       detail: "Tiro {notation} ({mode}): dadi [{dice}], tenuti [{kept}], modificatore {modifier}, totale {total}.",
+    },
+    condition: {
+      applied: "{target} subisce la condizione {condition}.",
+      immune: "{target} è immune alla condizione {condition}.",
     },
     effect: {
       expired: "L'effetto {effect} su {target} è terminato.",

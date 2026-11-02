@@ -194,6 +194,7 @@ Un contenuto non ancora fornito dall'autore non si inventa: se serve un esempio 
 | Monete | 5 monete come SRD (cambio 1:10) |
 | Creazione dei punteggi | Tre metodi: serie standard, acquisto a punti, 4d6 scartando il più basso. Il tiro lo esegue il server e lo registra |
 | PF per livello | Livello 1: massimo del Dado Vita + mod. COS. Livelli successivi: il giocatore sceglie tra tiro e media fissa (arrotondata per eccesso); il tiro lo esegue il server e lo registra |
+| Arrotondamento dei PF massimi | Qualunque calcolo che modifica i PF massimi (per esempio il livello 4 di Indebolimento, che li dimezza) si arrotonda **sempre per difetto**, in qualsiasi contesto |
 | Aumenti e talenti | Ai livelli 4, 8, 12, 16 e 19 si sceglie tra aumento dei punteggi e talento |
 | Multiclasse | Come SRD. Il modello della scheda la prevede dal giorno uno, ma si implementa dopo il caso a classe singola |
 | Sintonia e ispirazione | Come SRD (massimo 3 oggetti sintonizzati; ispirazione assegnata dal DM) |
@@ -316,6 +317,16 @@ Si consegna per ondate, ciascuna realmente usabile. Non iniziare l'ondata N+1 pr
 7. **Contenuti.** Classi, razze, talenti, incantesimi, oggetti, mostri forniti dall'autore man mano, con copertura che cresce.
 
 **Ultimo passo, dopo l'ondata 7: pubblicazione su Railway** (vedi sezione 11).
+
+### Automazione delle condizioni: cosa arriva in quale ondata
+
+Le regole delle condizioni sono funzioni di consultazione in `rules-srd`. Il collegamento automatico arriva con le parti da cui dipendono:
+
+- **Ondata 1 (fatto):** modello sulla pila degli effetti, consultazioni (vantaggio e svantaggio, fallimenti automatici, velocità, difese), etichette sulle prove (vista, udito, sociale), immunità alle condizioni, costo di movimento (strisciare, alzarsi), fine della presa, divieto di avvicinarsi del Spaventato.
+- **Ondata 4 (visione):** il controllo "vede la fonte" dello Spaventato e la portata di 1,5 m si ricavano dalla scena.
+- **Ondata 6 (combattimento):** i ganci applicano le consultazioni su attacco, prova, salvezza e movimento; salvezze ripetute a fine turno; conseguenze a cascata (perdita di concentrazione se incapacitato, oggetti lasciati cadere da chi è privo di sensi, Indebolimento 6).
+- **Ondata 2 (scheda) e riposi:** l'Indebolimento riduce i PF massimi sulla scheda con riga di storico (sempre arrotondati per difetto) e il riposo lungo ne toglie un livello.
+- **Resta sempre al DM:** la narrazione dell'udito, i comportamenti dell'Affascinato oltre gli attacchi, l'inconsapevolezza del Pietrificato.
 
 Fuori dalle prime ondate: mappa del mondo, voce e video, più DM per mondo, downtime.
 
