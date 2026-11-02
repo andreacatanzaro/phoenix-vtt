@@ -83,6 +83,17 @@ export const it = {
       vulnerability: "Vulnerabilità al danno {type}: {before} raddoppiato a {after}.",
       immunity: "Immunità al danno {type}: {before} annullato a {after}.",
     },
+    initiative: {
+      result: "{actor} tira iniziativa: {total}.",
+      "tie-players": "Parità a {total} per {actor}: i giocatori decidono l'ordine.",
+      "tie-dm": "Parità a {total} per {actor}: il DM decide l'ordine.",
+    },
+    turn: {
+      start: "Inizia il turno di {actor} (round {round}).",
+      resume: "{actor} riprende il turno interrotto (round {round}).",
+      "join-now": "{actor} entra in combattimento con iniziativa {total} e agisce subito (round {round}).",
+      "join-later": "{actor} entra in combattimento con iniziativa {total} e agirà al suo posto nel round {round}.",
+    },
     roll: {
       detail: "Tiro {notation} ({mode}): dadi [{dice}], tenuti [{kept}], modificatore {modifier}, totale {total}.",
     },
