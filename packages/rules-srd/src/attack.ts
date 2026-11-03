@@ -5,7 +5,13 @@ import { rollLogLine } from "./roll-log";
 /** Natural 20 always hits and is a critical hit, natural 1 always misses (author's rule). */
 export const attackRollMeta: RuleMeta = { automation: "full", source: "srd-modified" };
 
-export type AttackInput = { modifier: number; mode: RollMode; ac: number };
+export type AttackInput = {
+  modifier: number;
+  mode: RollMode;
+  ac: number;
+  /** Lowest natural d20 result that is a critical hit; 20 unless a feature widens it (the fighter's Champion). */
+  criticalFrom?: number;
+};
 
 export type AttackResult = {
   roll: RollResult;
@@ -19,6 +25,10 @@ export type AttackResult = {
 
 export function resolveAttackRoll(input: AttackInput, rng: Rng): AttackResult {
   if (!Number.isFinite(input.ac)) throw new RangeError("AC must be a finite number");
+  const criticalFrom = input.criticalFrom ?? 20;
+  if (!Number.isInteger(criticalFrom) || criticalFrom < 2 || criticalFrom > 20) {
+    throw new RangeError("The critical range starts at a natural 2 to 20");
+  }
   const roll = rollD20({ modifier: input.modifier, mode: input.mode }, rng);
   const params = { total: roll.total, ac: input.ac };
   const make = (hit: boolean, critical: boolean, key: string): AttackResult => ({
@@ -29,7 +39,7 @@ export function resolveAttackRoll(input: AttackInput, rng: Rng): AttackResult {
     notifyDm: roll.critical !== null,
     log: [rollLogLine(roll), { key, params }],
   });
-  if (roll.critical === "success") return make(true, true, "log.attack.critical-hit");
+  if (roll.critical === "success" || (roll.kept[0] ?? 0) >= criticalFrom) return make(true, true, "log.attack.critical-hit");
   if (roll.critical === "failure") return make(false, false, "log.attack.critical-miss");
   return roll.total >= input.ac ? make(true, false, "log.attack.hit") : make(false, false, "log.attack.miss");
 }

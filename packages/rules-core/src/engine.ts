@@ -1,6 +1,6 @@
 import { addEffect, advanceRounds, endEffectsOnEvent, removeEffects, type ActiveEffect } from "./effects";
 import type { Rng } from "./rng";
-import type { DecisionRequest, GameEvent, JsonValue, LogLine } from "./types";
+import type { DecisionRequest, GameEvent, JsonObject, JsonValue, LogLine } from "./types";
 
 export const DEFAULT_HOOK_PRIORITY = 100;
 /** Upper bound on events handled in one run; stops hooks that keep emitting each other. */
@@ -12,6 +12,8 @@ export const ADVANCE_ROUNDS_STEP = "engine:advance-rounds";
 export type HookContext = {
   event: GameEvent;
   effects: readonly ActiveEffect[];
+  /** Game data the rules keep between events (a creature's turn state, for instance), read-only here. */
+  store: Readonly<JsonObject>;
   rng: Rng;
   /** Option chosen for the request this hook asked, or null on the first call. A hook that asks must be re-entrant. */
   answer: string | null;
@@ -22,6 +24,8 @@ export type HookOutcome = {
   event?: GameEvent;
   addEffects?: ActiveEffect[];
   removeEffectIds?: string[];
+  /** Keys to set in the store; each value replaces the old one, and `null` removes the key. */
+  setStore?: JsonObject;
   /** Events processed after the current one, in order. */
   emit?: GameEvent[];
   /** Explains the change in readable terms. A hook that changes state without logging gets a generic line. */
@@ -45,6 +49,8 @@ export type HookDefinition = {
 /** Everything needed to pause and resume a resolution. Plain data, safe to JSON-serialize. */
 export type ResolutionState = {
   effects: ActiveEffect[];
+  /** Plain data owned by the rules; the engine only carries it and applies hooks' `setStore`. */
+  store: JsonObject;
   queue: GameEvent[];
   current: {
     event: GameEvent;
@@ -108,10 +114,11 @@ export type Engine = {
 };
 
 export function emptyState(): ResolutionState {
-  return { effects: [], queue: [], current: null, pending: null, answer: null, answerFor: null, processed: [], log: [], nextRequestId: 1, handled: 0 };
+  return { effects: [], store: {}, queue: [], current: null, pending: null, answer: null, answerFor: null, processed: [], log: [], nextRequestId: 1, handled: 0 };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+/** True for a plain object (not null, not an array). */
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -120,6 +127,7 @@ function isResolutionState(value: unknown): value is ResolutionState {
   if (!isRecord(value)) return false;
   return (
     Array.isArray(value["effects"]) &&
+    isRecord(value["store"]) &&
     Array.isArray(value["queue"]) &&
     Array.isArray(value["processed"]) &&
     Array.isArray(value["log"]) &&
@@ -135,8 +143,10 @@ function isResolutionState(value: unknown): value is ResolutionState {
 /** Rebuilds a state saved with JSON.stringify. */
 export function restoreState(json: string): ResolutionState {
   const parsed: unknown = JSON.parse(json);
-  if (!isResolutionState(parsed)) throw new Error("Invalid resolution state");
-  return parsed;
+  // States saved before the store existed have none: they start with an empty one.
+  const upgraded = isRecord(parsed) && !("store" in parsed) ? { ...parsed, store: {} } : parsed;
+  if (!isResolutionState(upgraded)) throw new Error("Invalid resolution state");
+  return upgraded;
 }
 
 function matchingHooks(ordered: readonly HookDefinition[], eventName: string): HookDefinition[] {
@@ -277,16 +287,23 @@ export function createEngine(hooks: readonly HookDefinition[]): Engine {
           work.answer = null;
           work.answerFor = null;
         }
-        const outcome = hook.run({ event: current.event, effects: work.effects, rng, answer });
+        const outcome = hook.run({ event: current.event, effects: work.effects, store: work.store, rng, answer });
         if (outcome.event !== undefined) current.event = outcome.event;
         if (outcome.ask === undefined) current.done.push(hook.id);
         for (const effect of outcome.addEffects ?? []) work.effects = addEffect(work.effects, effect).effects;
         if (outcome.removeEffectIds !== undefined) work.effects = removeEffects(work.effects, outcome.removeEffectIds);
+        if (outcome.setStore !== undefined) {
+          const changes = Object.entries(outcome.setStore);
+          const touched = new Set(changes.map(([key]) => key));
+          const kept = Object.entries(work.store).filter(([key]) => !touched.has(key));
+          work.store = Object.fromEntries([...kept, ...changes.filter(([, value]) => value !== null)]);
+        }
         if (outcome.log !== undefined) work.log.push(...outcome.log);
         const changedState =
           outcome.event !== undefined ||
           (outcome.addEffects?.length ?? 0) > 0 ||
           (outcome.removeEffectIds?.length ?? 0) > 0 ||
+          outcome.setStore !== undefined ||
           (outcome.emit?.length ?? 0) > 0;
         if (changedState && (outcome.log?.length ?? 0) === 0) {
           work.log.push({ key: "log.step.unexplained", params: { step: hook.id } });

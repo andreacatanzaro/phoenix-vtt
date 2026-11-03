@@ -1,4 +1,5 @@
 import { rollDice, type GameEvent, type LogLine, type Rng } from "@phoenix/rules-core";
+import { actorLine as line } from "./hook-support";
 import { MAX_EXHAUSTION } from "./conditions";
 import { hoursBetween, type GameTime } from "./game-time";
 import { heal, type VitalState } from "./death";
@@ -36,10 +37,6 @@ export function hitDicePool(size: number, total: number): HitDicePool {
     throw new RangeError(`Hit dice must be a whole number from 1 to ${String(MAX_HIT_DICE)}`);
   }
   return { size, total, spent: 0 };
-}
-
-function line(key: string, actorId: string, extra: Record<string, number | string> = {}): LogLine {
-  return { key, params: { actor: actorId, ...extra }, refs: { actor: "actor-id" } };
 }
 
 function event(name: string, actorId: string): GameEvent {

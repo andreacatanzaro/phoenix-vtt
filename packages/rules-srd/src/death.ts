@@ -1,4 +1,5 @@
 import { rollD20, rollDice, type GameEvent, type LogLine, type Rng, type RollMode, type RollResult } from "@phoenix/rules-core";
+import { actorLine as line } from "./hook-support";
 import { resolveD20Test, type D20TestResult } from "./d20-test";
 import { advanceTime, type GameTime } from "./game-time";
 import type { RuleMeta } from "./meta";
@@ -34,10 +35,6 @@ export function vitalState(hp: number, hpMax: number): VitalState {
 function amountOf(value: number, name: string): number {
   if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`${name} must be a whole number, 0 or more`);
   return value;
-}
-
-function line(key: string, actorId: string, extra: Record<string, number> = {}): LogLine {
-  return { key, params: { actor: actorId, ...extra }, refs: { actor: "actor-id" } };
 }
 
 function event(name: string, actorId: string): GameEvent {

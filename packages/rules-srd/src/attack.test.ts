@@ -55,3 +55,33 @@ describe("resolveAttackRoll", () => {
     expect(() => attack([10], { ac: Number.NaN })).toThrow();
   });
 });
+
+describe("wider critical range", () => {
+  const widened = (natural: number[], criticalFrom: number, ac = 30) =>
+    resolveAttackRoll({ modifier: 0, ac, mode: "normal", criticalFrom }, createScriptedRng(natural));
+
+  it("a natural result in the range is a critical hit whatever the AC", () => {
+    const r = widened([19], 19);
+    expect(r.hit).toBe(true);
+    expect(r.critical).toBe(true);
+    expect(r.log[1]?.key).toBe("log.attack.critical-hit");
+    expect(widened([18], 18).critical).toBe(true);
+  });
+
+  it("a result below the range is an ordinary roll", () => {
+    expect(widened([18], 19).hit).toBe(false);
+    expect(widened([18], 19, 10).critical).toBe(false);
+  });
+
+  it("with advantage the kept die decides", () => {
+    const r = resolveAttackRoll({ modifier: 0, ac: 30, mode: "advantage", criticalFrom: 19 }, createScriptedRng([5, 19]));
+    expect(r.critical).toBe(true);
+  });
+
+  it("a natural 1 never counts and a bad range is rejected", () => {
+    expect(widened([1], 2).critical).toBe(false);
+    expect(() => widened([10], 1)).toThrow();
+    expect(() => widened([10], 21)).toThrow();
+    expect(() => widened([10], 19.5)).toThrow();
+  });
+});

@@ -626,3 +626,50 @@ describe("automatic steps are planned once per event", () => {
     ]);
   });
 });
+
+describe("store", () => {
+  const writer: HookDefinition = { id: "writer", event: "a", run: () => ({ setStore: { counter: 1, gone: null }, log: [{ key: "w", params: {} }] }) };
+  const reader: HookDefinition = {
+    id: "reader",
+    event: "a",
+    priority: 200,
+    run: ({ store }) => ({ log: [{ key: "r", params: { seen: typeof store["counter"] === "number" ? store["counter"] : -1 } }] }),
+  };
+
+  it("a hook's setStore is visible to later hooks and kept in the state", () => {
+    const state = run([writer, reader], ev("a"));
+    expect(state.store).toEqual({ counter: 1 });
+    expect(state.log.find((l) => l.key === "r")?.params).toEqual({ seen: 1 });
+  });
+
+  it("keeps keys it was not told about and replaces the ones it was", () => {
+    const start = { ...emptyState(), store: { keep: "yes", counter: 9 } };
+    expect(run([writer], ev("a"), start).store).toEqual({ keep: "yes", counter: 1 });
+  });
+
+  it("null removes a key that was there", () => {
+    const start = { ...emptyState(), store: { gone: "x", stays: 1 } };
+    expect(run([writer], ev("a"), start).store).toEqual({ stays: 1, counter: 1 });
+  });
+
+  it("changing the store without a log line is reported as unexplained", () => {
+    const quiet: HookDefinition = { id: "quiet", event: "a", run: () => ({ setStore: { x: 1 } }) };
+    expect(logKeys(run([quiet], ev("a")))).toEqual(["log.step.unexplained"]);
+  });
+
+  it("survives a save and restore", () => {
+    const state = run([writer], ev("a"));
+    expect(restoreState(JSON.stringify(state)).store).toEqual(state.store);
+  });
+
+  it("a state saved before the store existed loads with an empty one", () => {
+    const old: Record<string, unknown> = { ...emptyState() };
+    old["store"] = undefined;
+    expect(restoreState(JSON.stringify(old)).store).toEqual({});
+  });
+
+  it("a damaged store is rejected", () => {
+    expect(() => restoreState(JSON.stringify({ ...emptyState(), store: null }))).toThrow();
+    expect(() => restoreState(JSON.stringify({ ...emptyState(), store: [1] }))).toThrow();
+  });
+});

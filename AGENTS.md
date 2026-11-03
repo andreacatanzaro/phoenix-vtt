@@ -64,7 +64,7 @@ server      ->  tutti i pacchetti
 client      ->  rules-core, rules-srd, content, shared   (solo lettura e anteprima)
 ```
 
-Comandi (da creare nell'ondata 1): `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm coverage:content` (rigenera `docs/COVERAGE.md`).
+Comandi (da creare nell'ondata 1): `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm coverage:content` (rigenera `docs/COVERAGE.md`), `pnpm coverage:check` (fallisce se `docs/COVERAGE.md` non è aggiornato; da usare in CI). Il rapporto legge i contenuti da `packages/content/src/registry.ts`: ogni nuova classe va registrata lì.
 
 ## 4. Convenzioni
 
@@ -82,8 +82,12 @@ Comandi (da creare nell'ondata 1): `pnpm install`, `pnpm dev`, `pnpm test`, `pnp
 | Master / DM | `dm` |
 | Giocatore | `player` |
 | Mondo | `world` |
+| Regione | `region` |
+| Area | `area` |
+| Luogo | `place` |
 | Sessione | `session` |
 | Scena | `scene` |
+| Collegamento tra scene | `sceneLink` |
 | Personaggio | `character` |
 | Attore (PNG, mostro, compagno) | `actor` |
 | Scheda | `sheet` |
@@ -171,7 +175,7 @@ export const shield = spell({
 
 **Componenti materiali.** Senza costo: soddisfatte da una borsa dei componenti o da un focus, senza tracciare l'oggetto. Con costo: il sistema controlla l'inventario (oggetto e valore minimo) prima del lancio, e lo consuma se l'incantesimo lo prevede, registrandolo nello storico. Il DM può sempre concederle a mano. Le mani libere restano a mano del DM. Un incantesimo dichiara: `material: { description, costGp?, consumed? }`.
 
-Un contenuto non ancora fornito dall'autore non si inventa: se serve un esempio per un test, si usa un elemento di prova marcato `// TEST FIXTURE` e fuori da `content/`.
+Le classi, i nomi e i testi italiani dell'SRD 5.1 si importano dall'**SRD 5.1 ufficiale in italiano** (CC BY 4.0), con `source: "srd"`. Un contenuto non presente né nell'SRD né fornito dall'autore non si inventa: se serve un esempio per un test, si usa un elemento di prova marcato `// TEST FIXTURE` e fuori da `content/`.
 
 ## 7. Meccaniche: SRD 5.1 con queste differenze
 
@@ -185,6 +189,14 @@ Un contenuto non ancora fornito dall'autore non si inventa: se serve un esempio 
 | Colpo critico | Un attacco con **20 naturale** è un colpo critico: raddoppia il **numero di dadi** di danno **e anche i bonus ai danni** (modificatori e bonus fissi). Le resistenze e le vulnerabilità si applicano dopo il raddoppio |
 | Parità di iniziativa | Come SRD: i **giocatori** ordinano i propri personaggi in parità tra loro; il **DM** decide ogni parità che coinvolge una sua creatura. Il sistema segnala la parità e non la risolve da solo |
 | Ingresso a combattimento in corso | Chi entra **tira l'iniziativa** e si inserisce per totale, **dopo** chi ha lo stesso totale, e **agisce nel round corrente**. Se il suo totale è **superiore** a quello di chi è di turno, gioca **subito** e chi era di turno **riprende** il suo turno dopo di lui (senza ripetere l'inizio del turno: evento `turn.resume`, non `turn.start`). Se il totale è uguale o inferiore, agisce al suo posto nell'ordine. Nessuno già passato in questo round rigioca |
+| Sorpresa | Come SRD: la dichiara il DM. Chi è sorpreso non può muoversi né effettuare un'azione nel primo turno e non può reagire finché quel turno non termina. L'SRD non nomina l'azione bonus, quindi resta disponibile |
+| Aiuto | Come SRD. L'aiuto a una prova vale solo per la prova del compito indicato; l'aiuto a un attacco richiede l'aiutante entro 1,5 m dal bersaglio (lo comunica la scena) |
+| Sottoclassi | Si scelgono sempre al **3° livello**, per tutte le classi (regola d'autore: nell'SRD alcune classi scelgono prima). I privilegi che l'SRD darebbe prima del 3° livello si decidono classe per classe all'importazione: chiedere all'autore |
+| Combattere con Armi Possenti | Come SRD, ma il giocatore **sceglie** se ripetere i dadi che hanno dato 1 o 2 (domanda al giocatore; senza risposta non si ripete). Vale per l'arma da mischia a due mani, due mani o versatile, dichiarata dall'attacco con `twoHandedMelee: true` |
+| Prepararsi | Come SRD. L'azione preparata si libera con la reazione (`action.ready-released`) e poi si esegue con lo stesso evento dell'azione e il flag `readied: true`, senza costi in più. Un attacco preparato è un solo attacco. Non gestito: muoversi alla massima velocità come azione preparata |
+| Vicinanza nelle condizioni | Se un bersaglio è entro 1,5 m lo dice la scena: ogni attacco deve dichiarare `withinReach`, mai sottinteso. Da esso dipendono il vantaggio o svantaggio contro un prono e il critico automatico contro un paralizzato o privo di sensi |
+| Attacchi di opportunità | Come SRD. Il sistema chiede la reazione; ostilità, vista e portata li verifica chi emette l'evento di uscita dalla portata. Non gestiti: teletrasporto e movimento forzato |
+| Indomabile | Ripete lo stesso tiro con le stesse circostanze (modificatore e vantaggio o svantaggio); il nuovo risultato vale |
 | Copertura | La assegna il DM a mano (parziale o totale, con i bonus alla CA); non si calcola dalla mappa |
 | Luce e visione | Automatiche, calcolate da muri, porte e luci dell'editor di scena (ondata dedicata) |
 | Veleni, malattie, trappole | Automatici: il motore applica danni e condizioni quando scattano; il DM può correggere |
@@ -193,9 +205,9 @@ Un contenuto non ancora fornito dall'autore non si inventa: se serve un esempio 
 | Peso | **Solo carico massimo**, legato alla Forza. Nessuna variante di ingombro. Pesi in **kg** |
 | Monete | 5 monete come SRD (cambio 1:10) |
 | Creazione dei punteggi | Tre metodi: serie standard, acquisto a punti, 4d6 scartando il più basso. Il tiro lo esegue il server e lo registra |
-| PF per livello | Livello 1: massimo del Dado Vita + mod. COS. Livelli successivi: il giocatore sceglie tra tiro e media fissa (arrotondata per eccesso); il tiro lo esegue il server e lo registra |
+| PF per livello | Livello 1: massimo del Dado Vita + mod. COS. Livelli successivi: il giocatore sceglie tra tiro e media fissa (arrotondata per eccesso); il tiro lo esegue il server e lo registra. Nessun minimo per livello: l'SRD non lo prevede (vale solo la regola sull'arrotondamento qui sotto: i PF massimi mai sotto 1) |
 | Arrotondamento dei PF massimi | Qualunque calcolo che modifica i PF massimi (per esempio il livello 4 di Indebolimento, che li dimezza) si arrotonda **sempre per difetto**, in qualsiasi contesto, ma **mai sotto 1**. Vale per le riduzioni e i ricalcoli; la media fissa dei PF per livello resta arrotondata per eccesso (riga "PF per livello") |
-| Aumenti e talenti | Ai livelli 4, 8, 12, 16 e 19 si sceglie tra aumento dei punteggi e talento |
+| Aumenti e talenti | Ai livelli 4, 8, 12, 16 e 19 si sceglie tra aumento dei punteggi e talento; alcune classi ne hanno di più (il Guerriero anche al 6 e al 14, il Ladro anche al 10), indicati dalla classe stessa |
 | Multiclasse | Come SRD. Il modello della scheda la prevede dal giorno uno, ma si implementa dopo il caso a classe singola |
 | Sintonia e ispirazione | Come SRD (massimo 3 oggetti sintonizzati; ispirazione assegnata dal DM) |
 | Grado di sfida e XP dei mostri | Come SRD, con un calcolatore di difficoltà per il DM; gli XP vengono suggeriti a fine scena e li conferma il DM |
@@ -260,7 +272,8 @@ Quando il DM dichiara un riposo lungo durante la sessione, il sistema applica i 
 Account
  └─ WorldMembership (ruolo: dm | player) ── World
                                               ├─ Actor (PNG, mostri, compagni)
-                                              ├─ Scene (libreria del mondo)
+                                              ├─ Region ── Area ── Place ── Scene (la scena è l'unità giocata)
+                                              ├─ SceneLink (da una scena a un'altra, scelto dal DM)
                                               └─ Session ── SessionSignup ── Character
                                                     ├─ ChatMessage / Roll
                                                     ├─ SceneRun (scena giocata, in sequenza)
@@ -276,6 +289,15 @@ Scene ── MapGeometry (immagine, muri, porte, luci, nebbia di guerra)
 Party ── AdventureJournal (diario dell'avventura, condiviso col party)
 ```
 
+- **Gerarchia del mondo.** Il DM crea un **mondo**. Il mondo è composto da **regioni**, ogni regione da **aree**, ogni area da **luoghi**, ogni luogo da **scene**. Le scene sono quelle che si giocano: token, mappa e geometria stanno sulla scena, non sui livelli superiori. Ogni elemento appartiene a un solo elemento del livello sopra; una scena appartiene sempre a un luogo.
+- **Collegamento tra scene.** Il DM può **concatenare** le scene (`SceneLink`, da una scena a un'altra) per **spostare tutti da una scena all'altra** con una sola azione. Regole confermate dall'autore:
+  - Si possono collegare scene anche di **luoghi, aree e regioni diversi**.
+  - Da una scena possono partire **più uscite**: la catena non è lineare.
+  - Si spostano i **personaggi** e i **PNG collegati al party** (per esempio un ostaggio o un famiglio). Gli altri attori restano dove sono.
+  - I token compaiono nella **zona di partenza** (`startZone`) che il DM ha previsto nella scena di arrivo.
+  - Lo spostamento **chiude la scena giocata** (con il suo rapporto di XP e loot) e ne apre una nuova.
+  - Se lo spostamento fa **avanzare l'orologio di gioco** e di quanto lo decide il DM, **nella configurazione della scena**.
+  - Se si può **uscire da una scena con un combattimento in corso** lo decide il DM, sempre **nella configurazione della scena**.
 - L'appartenenza al mondo è una tabella con ruolo, **non** un campo `dm_id`. Oggi ammette un solo DM; passare a più DM sarà una modifica di regola, non di schema.
 - Il mondo ha un **orologio di gioco** (`gameTime`, minuti interi). Ogni creatura ricorda quando è finito il suo ultimo riposo lungo.
 - La scheda ha **campi del giocatore** (aspetto e storia alla creazione, scelte di livello) e **campi del mondo** (livello, XP, oggetti, oro, risorse). Questi ultimi li modifica solo il DM o il sistema, sempre con una riga di storico.
@@ -283,7 +305,7 @@ Party ── AdventureJournal (diario dell'avventura, condiviso col party)
 
 ## 10. Client
 
-Pagine: accesso e registrazione; **lista dei personaggi** (stile selezione di World of Warcraft, con l'indicazione dell'avanzamento di livello in sospeso); creazione guidata; scheda in sola lettura (con le scelte consentite); diario personale e diario dell'avventura; pannello del mondo; bacheca delle sessioni (il DM pubblica titolo, data, livello consigliato, posti; i giocatori si iscrivono con un personaggio, il DM conferma; stati: bozza, pubblicata, in corso, chiusa); **tavolo live**; editor di scena per il DM.
+Pagine: accesso e registrazione; **lista dei personaggi** (stile selezione di World of Warcraft, con l'indicazione dell'avanzamento di livello in sospeso); creazione guidata; scheda in sola lettura (con le scelte consentite); diario personale e diario dell'avventura; pannello del mondo (con la navigazione regioni → aree → luoghi → scene e i collegamenti tra scene); bacheca delle sessioni (il DM pubblica titolo, data, livello consigliato, posti; i giocatori si iscrivono con un personaggio, il DM conferma; stati: bozza, pubblicata, in corso, chiusa); **tavolo live**; editor di scena per il DM.
 
 Il tavolo live: la mappa occupa quasi tutto lo schermo, il resto è a scomparsa; strumenti pochi e sempre visibili; pan e zoom fluidi; griglia da 1,5 m; token con aggancio; righello in metri; dadi e chat con notazione standard, tiri riservati e sussurri, log di sessione persistente. Per il movimento dei token il client applica subito la modifica in locale e la riconcilia con il server.
 
@@ -315,8 +337,8 @@ Si consegna per ondate, ciascuna realmente usabile. Non iniziare l'ondata N+1 pr
 2. **Personaggi.** Creazione guidata (tre metodi per i punteggi), scheda, storico delle modifiche, diari, avanzamento di livello con scelte in sospeso.
 3. **Tavolo minimo.** Scena, griglia, token, dadi e chat in tempo reale, con riconnessione. Da qui si gioca una sessione di prova.
 4. **Editor di scena e visione.** Muri, porte, luci, nebbia di guerra, calcolo di visione e linea d'effetto lato server.
-5. **Mondi e sessioni.** Inviti, bacheca, iscrizioni, chiusura di scena (XP e loot) e di sessione (cronaca).
-6. **Automazione del combattimento.** Iniziativa, attacchi, reazioni, concentrazione, magia con aree, componenti, trappole, con override del DM e log leggibile.
+5. **Mondi e sessioni.** Gerarchia del mondo (regioni, aree, luoghi) e collegamento delle scene con lo spostamento di tutti, inviti, bacheca, iscrizioni, chiusura di scena (XP e loot) e di sessione (cronaca).
+6. **Automazione del combattimento.** Iniziativa, attacchi, reazioni, concentrazione, magia con aree, componenti, trappole, con override del DM e log leggibile. Il nucleo di turno, azioni, attacco, movimento e attacchi di opportunità è già in `rules-srd` (`turn-hooks.ts`, sullo stato `store` del motore); restano danno applicato ai PF, tiri salvezza, concentrazione, magia, geometria e Protezione.
 7. **Contenuti.** Classi, razze, talenti, incantesimi, oggetti, mostri forniti dall'autore man mano, con copertura che cresce.
 
 **Ultimo passo, dopo l'ondata 7: pubblicazione su Railway** (vedi sezione 11).
@@ -346,6 +368,7 @@ Fuori dalle prime ondate: mappa del mondo, voce e video, più DM per mondo, down
 
 ## 15. Questioni ancora aperte
 
+- **Collegamento tra scene** (sezione 9): resta da decidere cosa succede agli **effetti attivi** (durate, concentrazione) di chi cambia scena.
 - Dettaglio del flusso "scelte di avanzamento in sospeso" (cosa può fare il personaggio finché non le completa).
 - Soglie di XP, classi, razze, talenti, incantesimi, oggetti, mostri: arrivano dall'autore.
 - **PF temporanei:** non sono ancora nel modello (`VitalState` ha solo PF e PF massimi). Vanno aggiunti con i primi contenuti che li concedono, rispettando le regole SRD (non si sommano, assorbono il danno per primi). **Da non dimenticare.**
