@@ -1,0 +1,62 @@
+# Local development: PostgreSQL, the server (with reload) and the client (Vite, with a proxy to the server).
+# The values below are for local use only. Production reads its configuration from environment variables.
+name: phoenix-vtt
+
+x-app: &app
+  build:
+    context: .
+    target: dev
+  environment: &app-env
+    NODE_ENV: development
+    DATABASE_URL: postgres://phoenix:phoenix@db:5432/phoenix
+    SESSION_SECRET: ${SESSION_SECRET:-dev-only-secret-change-me-dev-only-secret}
+  volumes:
+    # Sources are mounted one by one, so the node_modules installed in the image are not hidden.
+    - ./packages/rules-core/src:/app/packages/rules-core/src
+    - ./packages/rules-srd/src:/app/packages/rules-srd/src
+    - ./packages/content/src:/app/packages/content/src
+    - ./packages/shared/src:/app/packages/shared/src
+    - ./apps/server/src:/app/apps/server/src
+    - ./apps/server/drizzle:/app/apps/server/drizzle
+    - ./apps/client/src:/app/apps/client/src
+    - ./apps/client/index.html:/app/apps/client/index.html
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: phoenix
+      POSTGRES_PASSWORD: phoenix
+      POSTGRES_DB: phoenix
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U phoenix -d phoenix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    <<: *app
+    command: ["pnpm", "--filter", "@phoenix/server", "dev"]
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  client:
+    <<: *app
+    environment:
+      <<: *app-env
+      VITE_API_TARGET: http://server:3000
+    command: ["pnpm", "--filter", "@phoenix/client", "dev"]
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:

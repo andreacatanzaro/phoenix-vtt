@@ -51,7 +51,11 @@ phoenix-vtt/
     client/              interfaccia React + mappa PixiJS
   docs/
     COVERAGE.md          tabella di copertura dei contenuti (generata)
+    REQUISITI.md         requisiti, ondata, stato e test (un test controlla che i file citati esistano)
     SRD-ATTRIBUTION.md   testo di attribuzione dell'SRD 5.1
+  Dockerfile             multi-stage: target dev (compose) e prod (un solo servizio)
+  docker-compose.yml     sviluppo locale: PostgreSQL, server, client
+  .github/workflows/     integrazione continua
 ```
 
 **Regola sulle dipendenze (da far rispettare con un lint, es. `eslint-plugin-boundaries`):**
@@ -64,7 +68,7 @@ server      ->  tutti i pacchetti
 client      ->  rules-core, rules-srd, content, shared   (solo lettura e anteprima)
 ```
 
-Comandi (da creare nell'ondata 1): `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm coverage:content` (rigenera `docs/COVERAGE.md`), `pnpm coverage:check` (fallisce se `docs/COVERAGE.md` non è aggiornato; da usare in CI). Il rapporto legge i contenuti da `packages/content/src/registry.ts`: ogni nuova classe va registrata lì.
+Comandi: `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm coverage:content` (rigenera `docs/COVERAGE.md`), `pnpm coverage:check` (fallisce se `docs/COVERAGE.md` non è aggiornato; da usare in CI). Il rapporto legge i contenuti da `packages/content/src/registry.ts`: ogni nuova classe va registrata lì.
 
 ## 4. Convenzioni
 
@@ -247,6 +251,7 @@ Quando il DM dichiara un riposo lungo durante la sessione, il sistema applica i 
 
 - **Comandi e eventi.** Il client invia comandi tipizzati (`token.move`, `roll.request`, `decision.answer`...). Il server li valida (schema Zod e permessi), li applica al motore, salva ciò che serve e trasmette eventi a tutti i client della stanza, filtrati per visibilità.
 - **Stato live in memoria** per la scena attiva e gli scontri in corso, scritto su database a intervalli e a ogni evento importante. Un client che si riconnette riceve lo stato corrente. Poiché lo stato live è in memoria, il servizio gira in **una sola istanza**.
+- **Account e sessione.** Nome utente (3-32 caratteri: lettere, numeri, punto, trattino, trattino basso; unico senza distinguere maiuscole) e password (10-128 caratteri) con argon2id. Cookie `httpOnly`, `sameSite=lax`, `secure` in produzione (disattivarlo in produzione è rifiutato all'avvio); nel database resta un HMAC del token, mai il token. Dopo 5 accessi falliti per lo stesso nome il server risponde 429 per 15 minuti. Le risposte d'errore sono `{ error: "errors.…" }`: chiavi del catalogo, il testo italiano lo mostra il client. **Qualunque account può creare un mondo e ne diventa il DM** (un solo DM per mondo, imposto da un indice del database).
 - **REST** per account, mondi, personaggi, schede, bacheca, diari, upload. **WebSocket** per il tavolo live.
 - **Dadi.** Solo il server tira. Ogni tiro è registrato nel log di sessione con dadi, modificatori e totale.
 - **Visibilità.** Per ogni client il server calcola cosa vede (nebbia di guerra, luce, token nascosti, sussurri) e invia solo quello.

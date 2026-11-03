@@ -193,6 +193,43 @@ export const it = {
   reactions: {
     "opportunity-attack": { prompt: "Una creatura lascia la tua portata: vuoi usare la reazione per un attacco di opportunità?" },
   },
+  ui: {
+    app: { title: "Phoenix VTT" },
+    auth: {
+      login: "Accedi",
+      register: "Registrati",
+      logout: "Esci",
+      username: "Nome utente",
+      password: "Password",
+      "to-register": "Non hai un account? Registrati",
+      "to-login": "Hai già un account? Accedi",
+      "password-hint": "Almeno 10 caratteri.",
+      "username-hint": "Da 3 a 32 caratteri: lettere, numeri, punto, trattino e trattino basso.",
+    },
+    worlds: {
+      title: "I tuoi mondi",
+      empty: "Non fai ancora parte di nessun mondo.",
+      create: "Crea un mondo",
+      name: "Nome del mondo",
+      submit: "Crea",
+      "game-time": "Minuti di gioco trascorsi: {minutes}",
+    },
+    roles: { dm: "Dungeon Master", player: "Giocatore" },
+    loading: "Caricamento…",
+    "network-error": "Impossibile raggiungere il server.",
+  },
+  // Every API error is one of these keys; the client shows the Italian text.
+  errors: {
+    invalid: "I dati inviati non sono validi.",
+    unauthenticated: "Devi accedere per continuare.",
+    "not-found": "Elemento non trovato.",
+    "too-many-attempts": "Troppi tentativi: riprova tra qualche minuto.",
+    unavailable: "Il servizio non è disponibile.",
+    auth: {
+      "username-taken": "Questo nome utente è già in uso.",
+      "invalid-credentials": "Nome utente o password non corretti.",
+    },
+  },
   common: {
     yes: "Sì",
     no: "No",
