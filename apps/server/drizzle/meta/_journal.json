@@ -8,6 +8,20 @@
       "when": 1793721705715,
       "tag": "0000_whole_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793721765715,
+      "tag": "0001_empty_mac_gargan",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793729476782,
+      "tag": "0002_flat_morg",
+      "breakpoints": true
     }
   ]
 }

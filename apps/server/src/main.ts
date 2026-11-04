@@ -3,11 +3,12 @@ import { fileURLToPath } from "node:url";
 import { buildApp } from "./app";
 import { loadConfig } from "./config";
 import { connect } from "./db/connect";
+import { createFileImageStore } from "./image-store";
 
 const config = loadConfig(process.env);
 const here = dirname(fileURLToPath(import.meta.url));
 const connection = await connect(config.databaseUrl, join(here, "..", "drizzle"));
-const app = await buildApp({ db: connection.db, config });
+const app = await buildApp({ db: connection.db, config, imageStore: createFileImageStore(config.storagePath) });
 
 async function stop(signal: string): Promise<void> {
   app.log.info({ signal }, "shutting down");

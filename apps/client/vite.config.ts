@@ -7,6 +7,6 @@ const target = process.env["VITE_API_TARGET"] ?? "http://localhost:3000";
 
 export default defineConfig({
   plugins: [react()],
-  server: { host: "0.0.0.0", port: 5173, proxy: { "/api": target, "/health": target } },
+  server: { host: "0.0.0.0", port: 5173, proxy: { "/api": { target, ws: true }, "/health": target } },
   build: { outDir: "dist", sourcemap: true },
 });

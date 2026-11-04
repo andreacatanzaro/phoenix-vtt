@@ -25,7 +25,7 @@ Apri http://localhost:5173. Per fermare e cancellare anche i dati locali: `docke
 
 ## Configurazione
 
-Solo da variabili d'ambiente: `DATABASE_URL`, `SESSION_SECRET` (almeno 32 caratteri), e facoltative `PORT`, `HOST`, `COOKIE_SECURE`, `SESSION_DAYS`, `STATIC_DIR`. In produzione il cookie di sessione è sempre `Secure`: `COOKIE_SECURE=false` viene rifiutato, quindi l'immagine di produzione va provata dietro HTTPS (o con `NODE_ENV=development`). Nessun segreto nel repository: i valori di `docker-compose.yml` sono solo per l'uso locale.
+Solo da variabili d'ambiente: `DATABASE_URL`, `SESSION_SECRET` (almeno 32 caratteri), e facoltative `STORAGE_PATH` (cartella delle immagini caricate, un volume in produzione), `PORT`, `HOST`, `COOKIE_SECURE`, `SESSION_DAYS`, `STATIC_DIR`. In produzione il cookie di sessione è sempre `Secure`: `COOKIE_SECURE=false` viene rifiutato, quindi l'immagine di produzione va provata dietro HTTPS (o con `NODE_ENV=development`). Nessun segreto nel repository: i valori di `docker-compose.yml` sono solo per l'uso locale.
 
 ## Licenza e attribuzione
 

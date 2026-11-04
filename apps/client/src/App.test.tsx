@@ -32,7 +32,7 @@ describe("App", () => {
   it("shows the login form when nobody is signed in, in Italian", async () => {
     fakeServer({ "GET /api/auth/me": [{ status: 401, body: { error: "errors.unauthenticated" } }] });
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Accedi" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Entra al tavolo" })).toBeTruthy();
     expect(screen.getByLabelText("Nome utente")).toBeTruthy();
   });
 
@@ -46,9 +46,9 @@ describe("App", () => {
     fireEvent.change(await screen.findByLabelText("Nome utente"), { target: { value: "Aldo" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "una-password-lunga" } });
     fireEvent.click(screen.getByRole("button", { name: "Accedi" }));
-    expect(await screen.findByText("Phoenix")).toBeTruthy();
-    expect(screen.getByText(/Dungeon Master/)).toBeTruthy();
-    expect(screen.getByText("Minuti di gioco trascorsi: 90")).toBeTruthy();
+    expect(await screen.findByText("Dungeon Master")).toBeTruthy();
+    expect(screen.getByText("Phoenix", { selector: ".name" })).toBeTruthy();
+    expect(screen.getByText("Tempo di gioco: 1 h 30 min")).toBeTruthy();
   });
 
   it("shows the server's error as Italian text", async () => {
@@ -66,11 +66,12 @@ describe("App", () => {
   it("switches to registration and back", async () => {
     fakeServer({ "GET /api/auth/me": [{ status: 401, body: { error: "errors.unauthenticated" } }] });
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Non hai un account? Registrati" }));
-    expect(screen.getByRole("heading", { name: "Registrati" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("tab", { name: "Registrati" }));
+    expect(screen.getByRole("tab", { name: "Registrati" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByText("Almeno 10 caratteri.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Hai già un account? Accedi" }));
-    expect(screen.getByRole("heading", { name: "Accedi" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Accedi" }));
+    expect(screen.getByRole("tab", { name: "Accedi" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByText("Almeno 10 caratteri.")).toBeNull();
   });
 
   it("an already signed-in account goes straight to the worlds, and can create one and sign out", async () => {
@@ -81,12 +82,12 @@ describe("App", () => {
       "POST /api/auth/logout": [{ status: 204 }],
     });
     render(<App />);
-    expect(await screen.findByText("Non fai ancora parte di nessun mondo.")).toBeTruthy();
+    expect(await screen.findByText(/Non fai ancora parte di nessun mondo/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Nome del mondo"), { target: { value: "Nuovo" } });
-    fireEvent.click(screen.getByRole("button", { name: "Crea" }));
+    fireEvent.click(screen.getByRole("button", { name: "Crea mondo" }));
     expect(await screen.findByText("Nuovo")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Esci" }));
-    expect(await screen.findByRole("heading", { name: "Accedi" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Entra al tavolo" })).toBeTruthy();
     await waitFor(() => { expect(calls).toContain("POST /api/auth/logout"); });
   });
 

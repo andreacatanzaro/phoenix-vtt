@@ -12,6 +12,10 @@
   "dependencies": {
     "@fastify/cookie": "11.1.5",
     "@fastify/static": "10.1.8",
+    "@fastify/websocket": "11.3.6",
+    "@phoenix/content": "workspace:*",
+    "@phoenix/rules-core": "workspace:*",
+    "@phoenix/rules-srd": "workspace:*",
     "@phoenix/shared": "workspace:*",
     "argon2": "0.45.2",
     "drizzle-orm": "0.45.4",
@@ -23,6 +27,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "0.5.15",
     "@types/pg": "8.23.1",
+    "@types/ws": "8.18.2",
     "drizzle-kit": "0.31.11"
   }
 }

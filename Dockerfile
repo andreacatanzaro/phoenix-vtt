@@ -37,12 +37,15 @@ RUN pnpm --filter @phoenix/client build
 FROM base AS prod
 ENV NODE_ENV=production \
     PORT=3000 \
-    STATIC_DIR=/app/apps/client/dist
+    STATIC_DIR=/app/apps/client/dist \
+    STORAGE_PATH=/data/images
 COPY --from=prod-deps /app ./
 COPY packages ./packages
 COPY apps/server ./apps/server
 COPY --from=build /app/apps/client/dist ./apps/client/dist
-RUN chown -R node:node /app
+# The folder of uploaded pictures is a volume in production: it must exist and belong to the app user.
+RUN mkdir -p /data/images && chown -R node:node /app /data
+VOLUME ["/data/images"]
 USER node
 WORKDIR /app/apps/server
 EXPOSE 3000

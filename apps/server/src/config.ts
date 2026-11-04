@@ -12,6 +12,8 @@ const envSchema = z.object({
   COOKIE_SECURE: z.enum(["true", "false"]).optional(),
   /** Folder with the built client; when set, the server serves it, so the app is a single service. */
   STATIC_DIR: z.string().min(1).optional(),
+  /** Folder where uploaded pictures are kept (a volume in production). */
+  STORAGE_PATH: z.string().min(1).default("./storage"),
   SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
 });
 
@@ -24,6 +26,7 @@ export type Config = {
   cookieSecure: boolean;
   sessionDays: number;
   staticDir: string | null;
+  storagePath: string;
 };
 
 /** Reads the configuration from environment variables only. Throws a readable error when something is missing. */
@@ -46,5 +49,6 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
     cookieSecure: e.COOKIE_SECURE === undefined ? e.NODE_ENV === "production" : e.COOKIE_SECURE === "true",
     sessionDays: e.SESSION_DAYS,
     staticDir: e.STATIC_DIR ?? null,
+    storagePath: e.STORAGE_PATH,
   };
 }

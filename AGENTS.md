@@ -89,7 +89,7 @@ Comandi: `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm typecheck`, `pnpm lint`,
 | Regione | `region` |
 | Area | `area` |
 | Luogo | `place` |
-| Sessione | `session` |
+| Sessione di gioco | `gameSession` (la sessione di accesso di un account è `session` e resta interna al server) |
 | Scena | `scene` |
 | Collegamento tra scene | `sceneLink` |
 | Personaggio | `character` |
@@ -250,7 +250,9 @@ Quando il DM dichiara un riposo lungo durante la sessione, il sistema applica i 
 ## 8. Server
 
 - **Comandi e eventi.** Il client invia comandi tipizzati (`token.move`, `roll.request`, `decision.answer`...). Il server li valida (schema Zod e permessi), li applica al motore, salva ciò che serve e trasmette eventi a tutti i client della stanza, filtrati per visibilità.
-- **Stato live in memoria** per la scena attiva e gli scontri in corso, scritto su database a intervalli e a ogni evento importante. Un client che si riconnette riceve lo stato corrente. Poiché lo stato live è in memoria, il servizio gira in **una sola istanza**.
+- **Stato live in memoria** per la scena attiva e gli scontri in corso, scritto su database a intervalli e a ogni evento importante. Nell'ondata 3 i token e il log del tavolo sono scritti subito a ogni comando (nessuna perdita se il servizio si riavvia); la memoria tiene solo chi è connesso. Quando arriveranno gli scontri con molto stato si potrà passare alla scrittura a intervalli. Un client che si riconnette riceve lo stato corrente. Poiché lo stato live è in memoria, il servizio gira in **una sola istanza**.
+- **Connessione del tavolo.** Ogni comando (e ogni ping) riverifica la sessione di login con cui il socket è stato aperto: logout o scadenza chiudono la connessione (il logout subito, la scadenza al comando o al ping successivo). I frame sono giudicati all'arrivo, prima di accodarli: oltre il limite di frequenza si risponde con un errore, e chi insiste o accumula troppi comandi in attesa viene disconnesso. Rimuovere un membro avviene nella stessa coda dei comandi del tavolo.
+- **Immagini.** Il DM le scarica tutte; un giocatore solo quelle usate ora da qualcosa che vede (la mappa della scena in gioco, il volto di un token non nascosto di quella scena), anche se conosce l'id (`apps/server/src/image-access.ts`). Ogni caricamento ha una riga nel database e un file. Un'immagine che nessuna scena o token usa più perde prima la riga e, solo dopo il commit, il file, dopo un'ora di tolleranza (si carica prima e si collega dopo); un file senza riga più vecchio di un'ora (upload interrotto, rimozione fallita) viene eliminato dallo stesso giro. Lo fa uno spazzino orario (`apps/server/src/image-gc.ts`), e in più al salvataggio e all'eliminazione di una scena; ogni errore è registrato nel log. Le immagini si servono con `Cache-Control: private, no-store` e il file si legge solo dopo il controllo di visibilità. Chi aggiunge una tabella che punta a `images` deve aggiungerla al controllo di `reclaimImages`, altrimenti le sue immagini verrebbero eliminate.
 - **Account e sessione.** Nome utente (3-32 caratteri: lettere, numeri, punto, trattino, trattino basso; unico senza distinguere maiuscole) e password (10-128 caratteri) con argon2id. Cookie `httpOnly`, `sameSite=lax`, `secure` in produzione (disattivarlo in produzione è rifiutato all'avvio); nel database resta un HMAC del token, mai il token. Dopo 5 accessi falliti per lo stesso nome il server risponde 429 per 15 minuti. Le risposte d'errore sono `{ error: "errors.…" }`: chiavi del catalogo, il testo italiano lo mostra il client. **Qualunque account può creare un mondo e ne diventa il DM** (un solo DM per mondo, imposto da un indice del database).
 - **REST** per account, mondi, personaggi, schede, bacheca, diari, upload. **WebSocket** per il tavolo live.
 - **Dadi.** Solo il server tira. Ogni tiro è registrato nel log di sessione con dadi, modificatori e totale.
@@ -295,6 +297,9 @@ Party ── AdventureJournal (diario dell'avventura, condiviso col party)
 ```
 
 - **Gerarchia del mondo.** Il DM crea un **mondo**. Il mondo è composto da **regioni**, ogni regione da **aree**, ogni area da **luoghi**, ogni luogo da **scene**. Le scene sono quelle che si giocano: token, mappa e geometria stanno sulla scena, non sui livelli superiori. Ogni elemento appartiene a un solo elemento del livello sopra; una scena appartiene sempre a un luogo.
+- **Visibilità per i giocatori.** Ogni regione, area, luogo e scena ha un'indicazione **«rivelato»** che attiva il DM. Un giocatore vede un elemento solo se lui e tutti gli elementi sopra di lui sono rivelati; nascondere un elemento nasconde ciò che contiene, senza perdere le sue indicazioni. Le **note del DM** non arrivano mai ai giocatori. Un elemento si elimina solo se è vuoto: una scena con dei token non è vuota, e la scena in gioco in una sessione in corso non si elimina.
+- **Ingresso nel mondo.** Il DM aggiunge un giocatore scrivendo il **nome utente** di un account esistente; può anche rimuoverlo. Non ci sono codici d'invito.
+- **Sessioni.** Bozza → pubblicata → in corso → chiusa. Il DM può avviare anche una bozza. In un mondo c'è **una sola sessione in corso** (la impone un indice del database). Solo una bozza si elimina. I giocatori non vedono le bozze. La **nota di cronaca** si scrive durante la sessione o alla chiusura e si corregge dopo; la vedono tutti i membri.
 - **Collegamento tra scene.** Il DM può **concatenare** le scene (`SceneLink`, da una scena a un'altra) per **spostare tutti da una scena all'altra** con una sola azione. Regole confermate dall'autore:
   - Si possono collegare scene anche di **luoghi, aree e regioni diversi**.
   - Da una scena possono partire **più uscite**: la catena non è lineare.
@@ -313,6 +318,8 @@ Party ── AdventureJournal (diario dell'avventura, condiviso col party)
 Pagine: accesso e registrazione; **lista dei personaggi** (stile selezione di World of Warcraft, con l'indicazione dell'avanzamento di livello in sospeso); creazione guidata; scheda in sola lettura (con le scelte consentite); diario personale e diario dell'avventura; pannello del mondo (con la navigazione regioni → aree → luoghi → scene e i collegamenti tra scene); bacheca delle sessioni (il DM pubblica titolo, data, livello consigliato, posti; i giocatori si iscrivono con un personaggio, il DM conferma; stati: bozza, pubblicata, in corso, chiusa); **tavolo live**; editor di scena per il DM.
 
 Il tavolo live: la mappa occupa quasi tutto lo schermo, il resto è a scomparsa; strumenti pochi e sempre visibili; pan e zoom fluidi; griglia da 1,5 m; token con aggancio; righello in metri; dadi e chat con notazione standard, tiri riservati e sussurri, log di sessione persistente. Per il movimento dei token il client applica subito la modifica in locale e la riconcilia con il server.
+
+**Design del client (vincolante per ogni sviluppo del frontend, deciso dall'autore).** Ispirato allo stile di Narrantium (solo il linguaggio visivo: nessuna immagine, logo o testo preso da lì): una biblioteca di notte con un filo d'oro. Superfici blu-nero (`#101318`, pannelli `#151a21`, linee `#2b303b`), testo osso, **oro** (`#e8a530`) per ciò su cui si agisce, **verde** per «visibile ai giocatori» o completato, **rosso** per pericolo o sessione in corso. Caratteri: **Cinzel** per titoli e nomi (le sue minuscole sono maiuscolette), **Inter** per l'interfaccia, **Lora** corsivo per i testi narrativi, tutti installati con `@fontsource`. Ornamenti: filetto d'oro con rombo sotto i titoli, ghirigori agli angoli dei pannelli importanti (`.framed`), cielo stellato e venatura del legno nell'accesso, pulsante principale con sfumatura e alone dorato (`.btn.hero`). Le variabili e le decorazioni stanno in `apps/client/src/style.css` e `decor.css`. Lo stato si mostra con un segno che ha un significato (il pallino «visibile ai giocatori»), non con la sola decorazione. Il movimento risponde a un'azione, salvo l'ingresso della scheda di accesso, e rispetta `prefers-reduced-motion`. Ogni nuovo schermo e componente (tavolo, editor di scena, scheda del personaggio, chat) segue questo linguaggio, **senza eccezioni**: si usano le variabili e le classi esistenti (`.btn`, `.btn.hero`, `.panel`, `.framed`, `.badge`, `.tabs`, `.ornament`...), niente colori, caratteri o ornamenti nuovi nei componenti. Il tavolo segue le stesse regole: i colori dei token sono le variabili `--tk-*` di `style.css` (la tela PixiJS le legge da lì, mai colori scritti nel codice), la mappa sta in `.board`, i token in elenco usano `.dot`, i messaggi `.line` (tiri con filetto verde, riservati e sussurri con filetto oro tratteggiato). Se serve qualcosa che manca, si aggiunge a `style.css` nello stesso stile e si descrive qui. Un test (`scripts/design.test.ts`) fallisce se un componente scrive un colore o un carattere a mano.
 
 **Editor di scena (DM):** carica l'immagine della mappa e costruisce sopra muri, porte (aperte/chiuse), punti luce (raggio, intensità) e nebbia di guerra. Da questi dati il server calcola visione, luce e linea d'effetto per ogni giocatore.
 
@@ -336,13 +343,17 @@ Non è una consulenza legale. Non copiare testi di altri manuali (Manuale del Gi
 
 ## 13. Ondate di sviluppo
 
-Si consegna per ondate, ciascuna realmente usabile. Non iniziare l'ondata N+1 prima che l'ondata N abbia i test verdi.
+Si consegna per ondate, ciascuna realmente usabile. Non iniziare un'ondata prima che quella che la precede **nell'ordine di consegna** abbia i test verdi.
+
+**Ordine di consegna** (deciso dall'autore): 1 → **5a** → 3 → 4 → 2 → **5b** → 6 → 7 → Railway. I numeri restano quelli storici; l'ondata 5 è divisa in due perché una parte non dipende dai personaggi e una sì.
 
 1. **Fondamenta.** Monorepo, tooling, lint sulle dipendenze, motore (`rules-core`) con eventi, pila di effetti, richieste di decisione, log; `rules-srd` con d20, vantaggio e svantaggio, caratteristiche e abilità, iniziativa, attacchi e danni, condizioni, morte, riposi; una classe di prova nei test; account con username e password.
 2. **Personaggi.** Creazione guidata (tre metodi per i punteggi), scheda, storico delle modifiche, diari, avanzamento di livello con scelte in sospeso.
-3. **Tavolo minimo.** Scena, griglia, token, dadi e chat in tempo reale, con riconnessione. Da qui si gioca una sessione di prova.
+3. **Tavolo minimo.** Scena giocata, griglia, token, dadi e chat in tempo reale, con riconnessione; da qui si gioca una sessione di prova. Include, per decisione dell'autore: il **caricamento dell'immagine della mappa**, i **token nascosti**, il **filtro di visibilità** già presente nel protocollo (il server decide per ogni client cosa inviare; nell'ondata 3 la regola è «il DM vede tutto, il giocatore vede i token non nascosti», nella 4 diventa la visione calcolata) e lo **spostamento di tutti** da una scena all'altra.
 4. **Editor di scena e visione.** Muri, porte, luci, nebbia di guerra, calcolo di visione e linea d'effetto lato server.
-5. **Mondi e sessioni.** Gerarchia del mondo (regioni, aree, luoghi) e collegamento delle scene con lo spostamento di tutti, inviti, bacheca, iscrizioni, chiusura di scena (XP e loot) e di sessione (cronaca).
+5. **Mondi e sessioni**, in due parti:
+   - **5a** (subito dopo l'ondata 1, non dipende dai personaggi): gerarchia del mondo (regioni, aree, luoghi, scene), collegamento delle scene, inviti e ingresso dei giocatori nel mondo, sessioni (creare, pubblicare, aprire, chiudere) con la bacheca senza iscrizioni, nota di cronaca a fine sessione. Lo **spostamento di tutti** da una scena all'altra si consegna con il tavolo (ondata 3), perché muove i token.
+   - **5b** (dopo l'ondata 2): iscrizioni a una sessione con un personaggio, chiusura di scena con XP e loot.
 6. **Automazione del combattimento.** Iniziativa, attacchi, reazioni, concentrazione, magia con aree, componenti, trappole, con override del DM e log leggibile. Il nucleo di turno, azioni, attacco, movimento e attacchi di opportunità è già in `rules-srd` (`turn-hooks.ts`, sullo stato `store` del motore); restano danno applicato ai PF, tiri salvezza, concentrazione, magia, geometria e Protezione.
 7. **Contenuti.** Classi, razze, talenti, incantesimi, oggetti, mostri forniti dall'autore man mano, con copertura che cresce.
 
@@ -367,6 +378,7 @@ Fuori dalle prime ondate: mappa del mondo, voce e video, più DM per mondo, down
 - Parti sempre da un test che descrive la regola, poi scrivi il codice.
 - Cambiamenti piccoli e verificabili. Se un compito è grande, spezzalo e dichiara come.
 - Se una regola non è in questo file, vale l'SRD 5.1; se nemmeno l'SRD basta o hai un dubbio di prodotto, **fermati e chiedi all'autore**, indicando le opzioni.
+- **Frontend:** ogni schermata segue il «Design del client» della sezione 10; prima di scrivere un componente rileggilo e guarda gli schermi esistenti.
 - Non cambiare di tua iniziativa una scelta di questo documento. Se pensi che sia sbagliata, proponi la modifica e spiega perché.
 - Dopo ogni regola o contenuto nuovo, aggiorna `docs/COVERAGE.md`.
 - Questo file va aggiornato quando una decisione cambia: è la fonte di verità, non il codice.

@@ -26,6 +26,12 @@ export function requireAccount(request: FastifyRequest, reply: FastifyReply): Se
   return request.account;
 }
 
+/** PostgreSQL error 23503, whether it arrives bare or wrapped by the ORM. */
+export function isForeignKeyViolation(error: unknown): boolean {
+  if (hasCode(error, "23503")) return true;
+  return typeof error === "object" && error !== null && "cause" in error && hasCode(error.cause, "23503");
+}
+
 function hasCode(value: unknown, code: string): boolean {
   return typeof value === "object" && value !== null && "code" in value && value.code === code;
 }

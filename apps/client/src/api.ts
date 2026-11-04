@@ -2,11 +2,34 @@ import { z } from "zod";
 import {
   accountResponseSchema,
   apiErrorSchema,
+  elementResponseSchema,
+  imageResponseSchema,
+  memberResponseSchema,
+  membersResponseSchema,
+  sceneLinkResponseSchema,
+  sceneTableResponseSchema,
+  sceneLinksResponseSchema,
+  sessionResponseSchema,
+  sessionsResponseSchema,
   worldResponseSchema,
+  worldTreeSchema,
   worldsResponseSchema,
   type AccountView,
+  type CreateSessionInput,
+  type ElementCollection,
+  type ElementView,
+  type ImageKind,
+  type ImageView,
   type LoginInput,
+  type MemberView,
   type RegisterInput,
+  type SceneLinkView,
+  type SceneTableInput,
+  type SceneTableView,
+  type SessionView,
+  type UpdateElementInput,
+  type UpdateSessionInput,
+  type WorldTree,
   type WorldView,
 } from "@phoenix/shared";
 
@@ -46,6 +69,13 @@ async function call(method: string, path: string, schema: z.ZodType | null, body
   return data.data;
 }
 
+const world = (id: string): string => `/api/worlds/${encodeURIComponent(id)}`;
+
+/** Where the browser loads a picture of a world from (members only; the session cookie goes with it). */
+export function imageUrl(worldId: string, imageId: string): string {
+  return `${world(worldId)}/images/${encodeURIComponent(imageId)}`;
+}
+
 export const api = {
   async me(): Promise<AccountView | null> {
     try {
@@ -69,5 +99,75 @@ export const api = {
   },
   async createWorld(name: string): Promise<WorldView> {
     return (await call("POST", "/api/worlds", worldResponseSchema, { name })).world;
+  },
+  async tree(worldId: string): Promise<WorldTree> {
+    return call("GET", `${world(worldId)}/tree`, worldTreeSchema);
+  },
+  async createElement(worldId: string, collection: ElementCollection, input: { name: string; parentId?: string }): Promise<ElementView> {
+    return (await call("POST", `${world(worldId)}/${collection}`, elementResponseSchema, input)).element;
+  },
+  async updateElement(worldId: string, collection: ElementCollection, id: string, patch: UpdateElementInput): Promise<ElementView> {
+    return (await call("PATCH", `${world(worldId)}/${collection}/${encodeURIComponent(id)}`, elementResponseSchema, patch)).element;
+  },
+  async deleteElement(worldId: string, collection: ElementCollection, id: string): Promise<void> {
+    await call("DELETE", `${world(worldId)}/${collection}/${encodeURIComponent(id)}`, null);
+  },
+  async sceneLinks(worldId: string): Promise<SceneLinkView[]> {
+    return (await call("GET", `${world(worldId)}/scene-links`, sceneLinksResponseSchema)).links;
+  },
+  async createSceneLink(worldId: string, input: { fromSceneId: string; toSceneId: string; label: string }): Promise<SceneLinkView> {
+    return (await call("POST", `${world(worldId)}/scene-links`, sceneLinkResponseSchema, input)).link;
+  },
+  async deleteSceneLink(worldId: string, linkId: string): Promise<void> {
+    await call("DELETE", `${world(worldId)}/scene-links/${encodeURIComponent(linkId)}`, null);
+  },
+  async members(worldId: string): Promise<MemberView[]> {
+    return (await call("GET", `${world(worldId)}/members`, membersResponseSchema)).members;
+  },
+  async addMember(worldId: string, username: string): Promise<MemberView> {
+    return (await call("POST", `${world(worldId)}/members`, memberResponseSchema, { username })).member;
+  },
+  async removeMember(worldId: string, accountId: string): Promise<void> {
+    await call("DELETE", `${world(worldId)}/members/${encodeURIComponent(accountId)}`, null);
+  },
+  async sessions(worldId: string): Promise<SessionView[]> {
+    return (await call("GET", `${world(worldId)}/sessions`, sessionsResponseSchema)).sessions;
+  },
+  async createSession(worldId: string, input: Partial<CreateSessionInput> & { title: string }): Promise<SessionView> {
+    return (await call("POST", `${world(worldId)}/sessions`, sessionResponseSchema, input)).session;
+  },
+  async updateSession(worldId: string, sessionId: string, patch: UpdateSessionInput): Promise<SessionView> {
+    return (await call("PATCH", `${world(worldId)}/sessions/${encodeURIComponent(sessionId)}`, sessionResponseSchema, patch)).session;
+  },
+  async sessionStep(worldId: string, sessionId: string, step: "publish" | "start" | "close", body: { report?: string } = {}): Promise<SessionView> {
+    return (await call("POST", `${world(worldId)}/sessions/${encodeURIComponent(sessionId)}/${step}`, sessionResponseSchema, body)).session;
+  },
+  async saveReport(worldId: string, sessionId: string, report: string): Promise<SessionView> {
+    return (await call("PUT", `${world(worldId)}/sessions/${encodeURIComponent(sessionId)}/report`, sessionResponseSchema, { report })).session;
+  },
+  async sceneTable(worldId: string, sceneId: string): Promise<SceneTableView> {
+    return (await call("GET", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema)).scene;
+  },
+  async updateSceneTable(worldId: string, sceneId: string, patch: SceneTableInput): Promise<SceneTableView> {
+    return (await call("PATCH", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema, patch)).scene;
+  },
+  async uploadImage(worldId: string, kind: ImageKind, file: File): Promise<ImageView> {
+    let response: Response;
+    try {
+      response = await fetch(`${world(worldId)}/images?kind=${kind}`, { method: "POST", credentials: "same-origin", headers: { "content-type": file.type }, body: file });
+    } catch {
+      throw new NetworkFailure("network");
+    }
+    const body: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const parsed = apiErrorSchema.safeParse(body);
+      throw new ApiFailure(response.status, parsed.success ? parsed.data.error : "errors.unavailable");
+    }
+    const data = imageResponseSchema.safeParse(body);
+    if (!data.success) throw new ApiFailure(response.status, "errors.unavailable");
+    return data.data.image;
+  },
+  async deleteSession(worldId: string, sessionId: string): Promise<void> {
+    await call("DELETE", `${world(worldId)}/sessions/${encodeURIComponent(sessionId)}`, null);
   },
 };

@@ -10,6 +10,7 @@ x-app: &app
     NODE_ENV: development
     DATABASE_URL: postgres://phoenix:phoenix@db:5432/phoenix
     SESSION_SECRET: ${SESSION_SECRET:-dev-only-secret-change-me-dev-only-secret}
+    STORAGE_PATH: /data/images
   volumes:
     # Sources are mounted one by one, so the node_modules installed in the image are not hidden.
     - ./packages/rules-core/src:/app/packages/rules-core/src
@@ -20,6 +21,7 @@ x-app: &app
     - ./apps/server/drizzle:/app/apps/server/drizzle
     - ./apps/client/src:/app/apps/client/src
     - ./apps/client/index.html:/app/apps/client/index.html
+    - images:/data/images
 
 services:
   db:
@@ -60,3 +62,4 @@ services:
 
 volumes:
   pgdata:
+  images:

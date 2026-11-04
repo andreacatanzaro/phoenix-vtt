@@ -8,6 +8,8 @@ describe("loadConfig", () => {
     const c = loadConfig(base);
     expect(c).toMatchObject({ port: 3000, host: "0.0.0.0", nodeEnv: "development", sessionDays: 30, cookieSecure: false, staticDir: null });
     expect(loadConfig({ ...base, STATIC_DIR: "/app/client" }).staticDir).toBe("/app/client");
+    expect(c.storagePath).toBe("./storage");
+    expect(loadConfig({ ...base, STORAGE_PATH: "/data/images" }).storagePath).toBe("/data/images");
   });
 
   it("secure cookies are on by default in production only, and can be turned on explicitly elsewhere", () => {

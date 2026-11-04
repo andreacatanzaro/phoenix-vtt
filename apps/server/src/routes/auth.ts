@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { loginSchema, registerSchema, type AccountView } from "@phoenix/shared";
 import { DUMMY_HASH_PROMISE, hashPassword, verifyPassword } from "../auth/passwords";
-import { accountForToken, createSession, deleteSession } from "../auth/sessions";
+import { accountForToken, createSession, deleteSession, sessionId } from "../auth/sessions";
 import { LoginThrottle } from "../auth/throttle";
 import type { Config } from "../config";
 import { accounts } from "../db/schema";
@@ -13,7 +13,8 @@ export const SESSION_COOKIE = "phoenix_session";
 const MAX_LOGIN_FAILURES = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
-export type AuthContext = { db: Database; config: Config; now: () => Date };
+/** `onSessionEnded` hears the stored id of a login session the moment it is ended by a logout. */
+export type AuthContext = { db: Database; config: Config; now: () => Date; onSessionEnded?: (sessionKey: string) => void };
 
 export function authRoutes(app: FastifyInstance, ctx: AuthContext): void {
   const { db, config } = ctx;
@@ -79,7 +80,10 @@ export function authRoutes(app: FastifyInstance, ctx: AuthContext): void {
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
-    if (request.sessionToken !== null) await deleteSession(db, request.sessionToken, config.sessionSecret);
+    if (request.sessionToken !== null) {
+      await deleteSession(db, request.sessionToken, config.sessionSecret);
+      ctx.onSessionEnded?.(sessionId(request.sessionToken, config.sessionSecret));
+    }
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
     return reply.code(204).send();
   });

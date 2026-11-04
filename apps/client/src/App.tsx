@@ -14,17 +14,21 @@ export function App() {
     api.me().then(setAccount, (e: unknown) => { setError(errorText(e)); setAccount(null); });
   }, []);
 
-  if (account === undefined) return <p className="card">{t("ui.loading")}</p>;
+  if (account === undefined) return <p className="page muted">{t("ui.loading")}</p>;
   return (
     <>
-      {error !== null && <p role="alert" className="error">{error}</p>}
-      {account === null ? <LoginPage
+      {error !== null && <p role="alert" className="notice" style={{ margin: "1rem" }}>{error}</p>}
+      {account === null ? (
+        <LoginPage
           onSignedIn={(signedIn) => {
             // A failure of the first check no longer applies once the user is in.
             setError(null);
             setAccount(signedIn);
           }}
-        /> : <WorldsPage account={account} onSignedOut={() => { setAccount(null); }} />}
+        />
+      ) : (
+        <WorldsPage account={account} onSignedOut={() => { setAccount(null); }} />
+      )}
     </>
   );
 }
