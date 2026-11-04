@@ -18,6 +18,12 @@ const snapshot = (over: Partial<Extract<TableEvent, { type: "snapshot" }>> = {})
 const apply = (state: TableState, event: TableEvent, at = 1000): TableState => reduce(state, { type: "event", event, at });
 
 describe("table state", () => {
+  it("says whether it is the live table or the preparation of a scene, the table when the server does not say", () => {
+    expect(apply(initialState, snapshot()).mode).toBe("play");
+    expect(apply(initialState, snapshot({ mode: "prepare" })).mode).toBe("prepare");
+    expect(apply(apply(initialState, snapshot({ mode: "prepare" })), snapshot({ mode: "play" })).mode).toBe("play");
+  });
+
   it("a snapshot replaces everything and makes the table live", () => {
     const s = apply({ ...initialState, tokens: [token("old")], error: "errors.table.no-exit" }, snapshot());
     expect(s).toMatchObject({ connection: "live", session: { title: "Prova" }, me: { role: "player" }, error: null });

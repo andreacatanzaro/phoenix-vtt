@@ -5,6 +5,7 @@ import { roleIn } from "../access";
 import { gameSessions, images, sceneLinks, tokens } from "../db/schema";
 import type { Database } from "../db/types";
 import type { TableHub } from "./hub";
+import { closePreparation, refreshPreparation } from "./prepare";
 import { findToken, insertMessage, runningSession, loadScene, loadTokens, members, recentMessages, sessionById, tokenView, type SessionRow } from "./store";
 import { canSeeMessage, messagesFor, tokenFor, tokensFor, type Viewer } from "./visibility";
 
@@ -81,15 +82,86 @@ async function checkTokenImage(deps: TableDeps, worldId: string, imageId: string
   if (rows.length === 0) refuse("table.bad-target");
 }
 
-/** The token of the scene being played, or a refusal. */
-async function tokenHere(deps: TableDeps, session: SessionRow, tokenId: string): Promise<typeof tokens.$inferSelect> {
-  const row = await findToken(deps.db, session.worldId, tokenId);
-  if (row === null || session.currentSceneId === null || row.sceneId !== session.currentSceneId) return refuse("table.bad-target");
+/** The token of the scene shown in this room, or a refusal. */
+async function tokenHere(deps: TableDeps, ctx: TokenRoom, tokenId: string): Promise<typeof tokens.$inferSelect> {
+  const row = await findToken(deps.db, ctx.worldId, tokenId);
+  if (row === null || ctx.sceneId === null || row.sceneId !== ctx.sceneId) return refuse("table.bad-target");
   return row;
+}
+
+/** Where token commands act: a room (the key its people are kept under), its world, and the scene it shows. */
+export type TokenRoom = { roomKey: string; worldId: string; sceneId: string | null };
+type TokenCommand = Extract<TableCommand, { type: "token.move" | "token.add" | "token.update" | "token.remove" }>;
+
+/**
+ * The commands on tokens and texts, the same at the table and in the preparation of a scene: the viewer is checked, the
+ * change is saved, and everyone in the room is told what they may see.
+ */
+export async function tokenCommand(deps: TableDeps, ctx: TokenRoom, viewer: Viewer, command: TokenCommand): Promise<void> {
+  const { db } = deps;
+  switch (command.type) {
+    case "token.move": {
+      const row = await tokenHere(deps, ctx, command.tokenId);
+      if (viewer.role !== "dm" && row.ownerAccountId !== viewer.accountId) return refuse("table.not-your-token");
+      if (viewer.role !== "dm" && row.hidden) return refuse("table.bad-target");
+      const [updated] = await db.update(tokens).set({ x: command.x, y: command.y }).where(eq(tokens.id, row.id)).returning();
+      if (updated !== undefined) broadcastToken(deps, ctx.roomKey, tokenView(updated), row.hidden);
+      return;
+    }
+
+    case "token.add": {
+      requireDm(viewer);
+      if (ctx.sceneId === null) return refuse("table.no-scene");
+      // Owner and picture only mean something for a token; for a text they are ignored, so they are not checked either.
+      if (command.kind === "token") {
+        await checkOwner(deps, ctx.worldId, command.ownerAccountId);
+        await checkTokenImage(deps, ctx.worldId, command.imageId);
+      }
+      const [row] = await db
+        .insert(tokens)
+        .values({ worldId: ctx.worldId, sceneId: ctx.sceneId, kind: command.kind, label: command.label, color: command.color, imageId: command.kind === "text" ? null : command.imageId, x: command.x, y: command.y, size: command.kind === "text" ? 1 : command.size, hidden: command.hidden, travels: command.kind === "text" ? false : command.travels || command.ownerAccountId !== null, ownerAccountId: command.kind === "text" ? null : command.ownerAccountId, createdAt: deps.now() })
+        .returning();
+      if (row !== undefined) broadcastToken(deps, ctx.roomKey, tokenView(row), true);
+      return;
+    }
+
+    case "token.update": {
+      requireDm(viewer);
+      const row = await tokenHere(deps, ctx, command.tokenId);
+      if (command.ownerAccountId !== undefined) await checkOwner(deps, ctx.worldId, command.ownerAccountId);
+      if (command.imageId !== undefined) await checkTokenImage(deps, ctx.worldId, command.imageId);
+      // A name is short and a text may be long: the limit is the one of what this is.
+      if (command.label !== undefined && command.label.length > (row.kind === "text" ? TEXT_MAX_LENGTH : TOKEN_LABEL_MAX_LENGTH)) return refuse("invalid");
+      // A text is words on the map: it has no owner, no picture and does not travel with the group.
+      if (row.kind === "text" && (command.ownerAccountId !== undefined || command.travels === true || command.imageId !== undefined)) return refuse("invalid");
+      const changes = {
+        ...(command.label === undefined ? {} : { label: command.label }),
+        ...(command.color === undefined ? {} : { color: command.color }),
+        ...(command.size === undefined ? {} : { size: command.size }),
+        ...(command.hidden === undefined ? {} : { hidden: command.hidden }),
+        ...(command.travels === undefined ? {} : { travels: command.travels }),
+        ...(command.ownerAccountId === undefined ? {} : { ownerAccountId: command.ownerAccountId }),
+        ...(command.imageId === undefined ? {} : { imageId: command.imageId }),
+      };
+      if (Object.keys(changes).length === 0) return;
+      const [updated] = await db.update(tokens).set(changes).where(eq(tokens.id, row.id)).returning();
+      if (updated !== undefined) broadcastToken(deps, ctx.roomKey, tokenView(updated), row.hidden);
+      return;
+    }
+
+    case "token.remove": {
+      requireDm(viewer);
+      const row = await tokenHere(deps, ctx, command.tokenId);
+      await db.delete(tokens).where(eq(tokens.id, row.id));
+      // Only those who could see the token are told it is gone.
+      deps.hub.broadcast(ctx.roomKey, (viewer) => (viewer.role === "dm" || !row.hidden ? { type: "token.removed", tokenId: row.id } : null));
+      return;
+    }  }
 }
 
 /** The setup of a scene was saved: whoever is playing that scene gets it at once. */
 export async function refreshScene(deps: TableDeps, worldId: string, sceneId: string): Promise<void> {
+  await refreshPreparation(deps, worldId, sceneId);
   const session = await runningSession(deps.db, worldId);
   if (session === null) return;
   await deps.hub.serial(session.id, async () => {
@@ -166,69 +238,18 @@ async function run(deps: TableDeps, sessionId: string, asked: Viewer, command: T
       return;
     }
 
-    case "token.move": {
-      const row = await tokenHere(deps, session, command.tokenId);
-      if (viewer.role !== "dm" && row.ownerAccountId !== viewer.accountId) return refuse("table.not-your-token");
-      if (viewer.role !== "dm" && row.hidden) return refuse("table.bad-target");
-      const [updated] = await db.update(tokens).set({ x: command.x, y: command.y }).where(eq(tokens.id, row.id)).returning();
-      if (updated !== undefined) broadcastToken(deps, session.id, tokenView(updated), row.hidden);
-      return;
-    }
-
-    case "token.add": {
-      requireDm(viewer);
-      if (session.currentSceneId === null) return refuse("table.no-scene");
-      // Owner and picture only mean something for a token; for a text they are ignored, so they are not checked either.
-      if (command.kind === "token") {
-        await checkOwner(deps, session.worldId, command.ownerAccountId);
-        await checkTokenImage(deps, session.worldId, command.imageId);
-      }
-      const [row] = await db
-        .insert(tokens)
-        .values({ worldId: session.worldId, sceneId: session.currentSceneId, kind: command.kind, label: command.label, color: command.color, imageId: command.kind === "text" ? null : command.imageId, x: command.x, y: command.y, size: command.kind === "text" ? 1 : command.size, hidden: command.hidden, travels: command.kind === "text" ? false : command.travels || command.ownerAccountId !== null, ownerAccountId: command.kind === "text" ? null : command.ownerAccountId, createdAt: deps.now() })
-        .returning();
-      if (row !== undefined) broadcastToken(deps, session.id, tokenView(row), true);
-      return;
-    }
-
-    case "token.update": {
-      requireDm(viewer);
-      const row = await tokenHere(deps, session, command.tokenId);
-      if (command.ownerAccountId !== undefined) await checkOwner(deps, session.worldId, command.ownerAccountId);
-      if (command.imageId !== undefined) await checkTokenImage(deps, session.worldId, command.imageId);
-      // A name is short and a text may be long: the limit is the one of what this is.
-      if (command.label !== undefined && command.label.length > (row.kind === "text" ? TEXT_MAX_LENGTH : TOKEN_LABEL_MAX_LENGTH)) return refuse("invalid");
-      // A text is words on the map: it has no owner, no picture and does not travel with the group.
-      if (row.kind === "text" && (command.ownerAccountId !== undefined || command.travels === true || command.imageId !== undefined)) return refuse("invalid");
-      const changes = {
-        ...(command.label === undefined ? {} : { label: command.label }),
-        ...(command.color === undefined ? {} : { color: command.color }),
-        ...(command.size === undefined ? {} : { size: command.size }),
-        ...(command.hidden === undefined ? {} : { hidden: command.hidden }),
-        ...(command.travels === undefined ? {} : { travels: command.travels }),
-        ...(command.ownerAccountId === undefined ? {} : { ownerAccountId: command.ownerAccountId }),
-        ...(command.imageId === undefined ? {} : { imageId: command.imageId }),
-      };
-      if (Object.keys(changes).length === 0) return;
-      const [updated] = await db.update(tokens).set(changes).where(eq(tokens.id, row.id)).returning();
-      if (updated !== undefined) broadcastToken(deps, session.id, tokenView(updated), row.hidden);
-      return;
-    }
-
-    case "token.remove": {
-      requireDm(viewer);
-      const row = await tokenHere(deps, session, command.tokenId);
-      await db.delete(tokens).where(eq(tokens.id, row.id));
-      // Only those who could see the token are told it is gone.
-      deps.hub.broadcast(session.id, (viewer) => (viewer.role === "dm" || !row.hidden ? { type: "token.removed", tokenId: row.id } : null));
-      return;
-    }
+    case "token.move":
+    case "token.add":
+    case "token.update":
+    case "token.remove":
+      return tokenCommand(deps, { roomKey: session.id, worldId: session.worldId, sceneId: session.currentSceneId }, viewer, command);
 
     case "scene.open": {
       requireDm(viewer);
       const scene = await loadScene(db, session.worldId, command.sceneId);
       if (scene === null) return refuse("table.bad-target");
       await db.update(gameSessions).set({ currentSceneId: scene.id }).where(eq(gameSessions.id, session.id));
+      closePreparation(deps, scene.id);
       await say(deps, session, t("table.system.scene-opened", { scene: scene.name }));
       await sendSnapshots(deps, session);
       return;
@@ -251,6 +272,7 @@ async function run(deps: TableDeps, sessionId: string, asked: Viewer, command: T
         for (const spot of placed) await tx.update(tokens).set({ sceneId: destination.id, x: spot.x, y: spot.y }).where(eq(tokens.id, spot.id));
         await tx.update(gameSessions).set({ currentSceneId: destination.id }).where(eq(gameSessions.id, session.id));
       });
+      closePreparation(deps, destination.id);
       await say(deps, session, t("table.system.scene-travel", { scene: destination.name }));
       await sendSnapshots(deps, session);
       return;

@@ -118,10 +118,10 @@ export class TableHub {
     }
   }
 
-  /** The session ended: tell everyone and close their connections. */
-  endSession(sessionId: string): void {
+  /** The session ended (or the room is no longer to be used): tell everyone why and close their connections. */
+  endSession(sessionId: string, error = "errors.table.no-session"): void {
     for (const client of this.clients(sessionId)) {
-      client.send({ type: "error", error: "errors.table.no-session" });
+      client.send({ type: "error", error });
       client.close();
     }
     this.rooms.delete(sessionId);

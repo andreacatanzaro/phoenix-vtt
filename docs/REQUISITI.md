@@ -91,10 +91,10 @@ Requisiti aggiunti dall'autore dopo l'ondata 3. Nessuno è ancora fatto: il test
 | --- | --- | --- | --- |
 | Allineamento della mappa alla griglia in tre passi come Owlbear Rodeo: Offset (àncora trascinata sul punto che deve coincidere con un incrocio, con lente d'ingrandimento), Size (quadrato trascinato fino a coprire una casella) e Refine (griglia calcolata sovrapposta, incroci spostabili) | §10 | fatto | `apps/client/src/table/align.test.ts`, `apps/client/src/AlignBar.test.tsx`, `apps/client/src/TablePage.test.tsx` |
 | Dall'allineamento si ricavano la dimensione del quadretto e lo spostamento della griglia; l'inserimento a numeri resta sempre possibile; anteprima della griglia attivabile | §10 | fatto | `apps/client/src/SceneControls.test.tsx`, `apps/server/src/images.test.ts` |
-| La scena si prepara prima della sessione, senza sessione in corso, nella schermata del tavolo in modalità preparazione (senza chat né giocatori, solo DM) | §10 | da fare | — |
-| In preparazione il DM carica e cambia la mappa, imposta la griglia, disegna la zona di partenza dei giocatori sulla mappa, aggiunge, sposta, nasconde e rimuove token e testi | §10 | da fare | — |
-| Un solo stato della scena: ciò che si prepara è ciò che si trova in sessione, e ciò che si muove in gioco resta | §9 | da fare | — |
-| La scena in gioco non si apre in preparazione; le altre sì, anche con una sessione in corso, senza che i giocatori se ne accorgano | §9, §10 | da fare | — |
+| La scena si prepara prima della sessione, senza sessione in corso, nella schermata del tavolo in modalità preparazione (senza chat né giocatori, solo DM) | §10 | fatto | `apps/server/src/prepare.test.ts`, `apps/client/src/TablePage.test.tsx`, `apps/client/src/WorldPagePrepare.test.tsx` |
+| In preparazione il DM carica e cambia la mappa, imposta la griglia, disegna la zona di partenza dei giocatori sulla mappa, aggiunge, sposta, nasconde e rimuove token e testi | §10 | fatto | `apps/server/src/prepare.test.ts`, `apps/client/src/TablePage.test.tsx`, `apps/client/src/table/geometry.test.ts` |
+| Un solo stato della scena: ciò che si prepara è ciò che si trova in sessione, e ciò che si muove in gioco resta | §9 | fatto | `apps/server/src/prepare.test.ts` |
+| La scena in gioco non si apre in preparazione; le altre sì, anche con una sessione in corso, senza che i giocatori se ne accorgano | §9, §10 | fatto | `apps/server/src/prepare.test.ts` |
 | Regione con una mappa; le aree sono poligoni a punti disegnati sulla mappa della regione | §9, §10 | da fare | — |
 | I luoghi sono pin dentro un'area, sulla mappa della regione; ogni luogo ha una mappa | §9 | da fare | — |
 | Le scene sono pin sulla mappa del luogo; la scena giocata (mappa da battaglia, griglia, token) resta come oggi | §9 | da fare | — |

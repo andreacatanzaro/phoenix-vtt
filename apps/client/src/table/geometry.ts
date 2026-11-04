@@ -1,4 +1,4 @@
-import type { TableScene, TokenView } from "@phoenix/shared";
+import { MAX_START_COORDINATE, MAX_START_SIDE, type TableScene, type TokenView } from "@phoenix/shared";
 
 /** How the board is shown: `zoom` times the scene, with the scene's origin moved to (panX, panY) on the screen. */
 export type View = { zoom: number; panX: number; panY: number };
@@ -33,6 +33,19 @@ export function boardSize(scene: Pick<TableScene, "mapWidth" | "mapHeight" | "gr
 /** The square a point of the scene falls in. */
 export function cellAt(scene: Pick<TableScene, "gridPx" | "gridOffsetX" | "gridOffsetY">, p: Point): Point {
   return { x: Math.floor((p.x - scene.gridOffsetX) / scene.gridPx), y: Math.floor((p.y - scene.gridOffsetY) / scene.gridPx) };
+}
+
+/**
+ * The squares between two points of the scene, corners included, as a start zone: its first square and its size. It is
+ * kept to the size and the coordinates a start zone may have.
+ */
+export function cellRectBetween(scene: Pick<TableScene, "gridPx" | "gridOffsetX" | "gridOffsetY">, a: Point, b: Point): { x: number; y: number; w: number; h: number } {
+  const from = cellAt(scene, a);
+  const to = cellAt(scene, b);
+  const limit = (n: number): number => Math.max(-MAX_START_COORDINATE, Math.min(MAX_START_COORDINATE, n));
+  const x = Math.min(from.x, to.x);
+  const y = Math.min(from.y, to.y);
+  return { x: limit(x), y: limit(y), w: Math.min(MAX_START_SIDE, Math.abs(to.x - from.x) + 1), h: Math.min(MAX_START_SIDE, Math.abs(to.y - from.y) + 1) };
 }
 
 export function clampCell(cell: Point): Point {

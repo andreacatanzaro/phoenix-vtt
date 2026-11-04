@@ -44,7 +44,8 @@ export const sceneTableViewSchema = z.object({
   start: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }),
 });
 export type SceneTableView = z.infer<typeof sceneTableViewSchema>;
-export const sceneTableResponseSchema = z.object({ scene: sceneTableViewSchema });
+/** `inPlay`: this scene is the one being played in the running session (the setup read by the DM says so). */
+export const sceneTableResponseSchema = z.object({ scene: sceneTableViewSchema, inPlay: z.boolean().default(false) });
 
 /** Token colors, by name; the client maps each to the design palette. */
 export const TOKEN_COLORS = ["gold", "green", "red", "blue", "violet", "grey", "white", "black"] as const;
@@ -173,6 +174,8 @@ export const tableEventSchema = z.discriminatedUnion("type", [
     tokens: z.array(tokenViewSchema),
     messages: z.array(messageViewSchema),
     present: z.array(presenceSchema),
+    /** "prepare" when this is the preparation of a scene, without a session; missing means the live table. */
+    mode: z.enum(["play", "prepare"]).optional(),
   }),
   z.object({ type: z.literal("token.upserted"), token: tokenViewSchema }),
   z.object({ type: z.literal("token.removed"), tokenId: z.string() }),

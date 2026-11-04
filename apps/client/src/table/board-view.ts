@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
 import type { TableScene, TokenView } from "@phoenix/shared";
 import { crossingPoint, dragTo, gridOf, handleAt, HANDLE_PX, type AlignHandle, type AlignState, type AlignStep } from "./align";
-import { boardSize, cellAt, clampCell, fitView, groupDrop, keepCenterOnResize, panBy, samePoint, toScene, tokenAt, tokenRect, viewCenter, viewFor, zoomAt, type Point, type View } from "./geometry";
+import { boardSize, cellAt, cellRectBetween, clampCell, fitView, groupDrop, keepCenterOnResize, panBy, samePoint, toScene, tokenAt, tokenRect, viewCenter, viewFor, zoomAt, type Point, type View } from "./geometry";
 import { formatMeters, radiusDistance, rulerDistance } from "./measure";
 import { readPalette, type Palette } from "./palette";
 import { colorOf, livePointers, type RemotePointer } from "./pointers";
@@ -48,6 +48,8 @@ export type BoardCallbacks = {
   onAnchor: (screenAt: Point | null) => void;
   /** A handle of the alignment was dragged: the new state. */
   onAlign: (state: AlignState) => void;
+  /** The start zone was drawn: its first square and its size, in squares. */
+  onStartZone: (zone: { x: number; y: number; w: number; h: number }) => void;
 };
 
 type Drag =
@@ -57,6 +59,7 @@ type Drag =
   | { kind: "lasso"; loop: Point[]; additive: boolean; before: ReadonlySet<string> }
   | { kind: "measure"; from: Point; to: Point }
   | { kind: "align"; handle: AlignHandle; base: AlignState }
+  | { kind: "zone"; from: Point; to: Point }
   | null;
 
 const WHEEL_STEP = 0.0015;
@@ -69,7 +72,7 @@ const CLICK_SLOP = 4;
 /** The loupe shown while a handle of the alignment is dragged: its size on the screen, and how much of the screen it magnifies. */
 const LOUPE_SIZE = 132;
 const LOUPE_SOURCE = 22;
-const CURSORS: Record<Tool, string> = { move: "grab", select: "default", measure: "crosshair", pointer: "none", text: "text" };
+const CURSORS: Record<Tool, string> = { move: "grab", select: "default", measure: "crosshair", pointer: "none", text: "text", start: "crosshair" };
 
 function loadTexture(url: string): Promise<Texture> {
   return new Promise((resolve, reject) => {
@@ -241,6 +244,7 @@ export class BoardView {
       const hit = tokenAt(props.scene, props.tokens, scenePoint);
       if (props.tool === "select") this.startSelect(hit, at, scenePoint, e.shiftKey);
       else if (props.tool === "measure") this.drag = { kind: "measure", from: scenePoint, to: scenePoint };
+      else if (props.tool === "start") this.drag = { kind: "zone", from: scenePoint, to: scenePoint };
       else if (props.tool === "text" && hit === null) this.callbacks.onPlaceText(clampCell(cellAt(props.scene, scenePoint)), at);
     });
 
@@ -271,6 +275,9 @@ export class BoardView {
       } else if (drag.kind === "lasso") {
         drag.loop.push(at);
         this.drawOverlay();
+      } else if (drag.kind === "zone") {
+        drag.to = scenePoint;
+        this.drawZone(props, drag);
       } else if (drag.kind === "align") {
         this.loupeAt = at;
         this.callbacks.onAlign(dragTo(drag.handle, drag.base, scenePoint));
@@ -294,6 +301,7 @@ export class BoardView {
       if (drag.kind === "group") this.dropGroup(props, drag);
       else if (drag.kind === "box") this.finishBox(props, drag);
       else if (drag.kind === "lasso") this.finishLasso(props, drag);
+      else if (drag.kind === "zone") this.finishZone(props, drag);
       // A ruler stays on the board until it is replaced or the tool is changed.
       this.drawOverlay();
     };
@@ -694,6 +702,23 @@ export class BoardView {
     this.loupeAt = null;
     this.loupe?.remove();
     this.loupe = null;
+  }
+
+  /** The squares the start zone would cover, shown while it is drawn. */
+  private drawZone(props: BoardProps, drag: Extract<NonNullable<Drag>, { kind: "zone" }>): void {
+    this.toolLayer.removeChildren().forEach((c) => { c.destroy({ children: true }); });
+    const zone = cellRectBetween(props.scene, drag.from, drag.to);
+    const r = tokenRect(props.scene, { x: zone.x, y: zone.y, size: 1 });
+    const g = new Graphics();
+    g.rect(r.x, r.y, zone.w * props.scene.gridPx, zone.h * props.scene.gridPx)
+      .fill({ color: this.palette.green, alpha: 0.18 })
+      .stroke({ width: 2 / this.view.zoom, color: this.palette.green, alpha: 0.95 });
+    this.toolLayer.addChild(g);
+  }
+
+  private finishZone(props: BoardProps, drag: Extract<NonNullable<Drag>, { kind: "zone" }>): void {
+    this.toolLayer.removeChildren().forEach((c) => { c.destroy({ children: true }); });
+    this.callbacks.onStartZone(cellRectBetween(props.scene, drag.from, drag.to));
   }
 
   private drawMeasure(props: BoardProps): void {

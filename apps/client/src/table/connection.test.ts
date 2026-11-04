@@ -157,4 +157,8 @@ describe("tableUrl", () => {
     expect(tableUrl("w 1", { protocol: "https:", host: "a.b" })).toBe("wss://a.b/api/worlds/w%201/table");
     expect(tableUrl("w", { protocol: "http:", host: "localhost:5173" })).toBe("ws://localhost:5173/api/worlds/w/table");
   });
+
+  it("is the preparation of a scene when a scene is given", () => {
+    expect(tableUrl("w 1", { protocol: "https:", host: "a.b" }, "s/1")).toBe("wss://a.b/api/worlds/w%201/scenes/s%2F1/prepare");
+  });
 });

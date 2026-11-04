@@ -19,6 +19,7 @@ type BoardProps = {
   resetViewSeq: number;
   align: { step: string; state: { anchor: { x: number; y: number }; size: number }; preview: boolean } | null;
   onAlign: (state: { anchor: { x: number; y: number }; size: number }) => void;
+  onStartZone: (zone: { x: number; y: number; w: number; h: number }) => void;
   viewRequest: { seq: number } | null;
   tokens: { id: string }[];
   scene: { id: string };
@@ -126,6 +127,13 @@ const press = (key: string, target: Element | Window = window): void => { act(()
 const tool = (): string | undefined => screen.getByTestId("board").dataset["tool"];
 
 describe("the screen", () => {
+  it("lets the person leave while it is still connecting or reconnecting, in the table and in the preparation", () => {
+    const onLeave = vi.fn();
+    render(<TablePage worldId="w1" prepareSceneId="s1" onLeave={onLeave} />);
+    fireEvent.click(screen.getByRole("button", { name: "Lascia il tavolo" }));
+    expect(onLeave).toHaveBeenCalledTimes(1);
+  });
+
   it("connects to the table of the world and waits for it", () => {
     render(<TablePage worldId="w1" onLeave={vi.fn()} />);
     expect(socket().url).toMatch(/^wss?:\/\/.+\/api\/worlds\/w1\/table$/);
@@ -474,6 +482,72 @@ describe("writing a text", () => {
     act(() => { theBoard().onPlaceText({ x: 1, y: 1 }, { x: 10, y: 10 }); });
     receive(snapshot("dm", { scene: { ...scene, id: "s2", name: "Cantina" }, tokens: [] }));
     expect(screen.queryByLabelText("Testo da scrivere sulla mappa")).toBeNull();
+  });
+});
+
+describe("preparing a scene", () => {
+  const prepSnapshot = (over: Partial<Extract<TableEvent, { type: "snapshot" }>> = {}): TableEvent => snapshot("dm", { mode: "prepare", session: { id: "prepare:s1", title: "Sala comune" }, messages: [], ...over });
+  const prepare = (): void => {
+    render(<TablePage worldId="w1" prepareSceneId="s1" onLeave={vi.fn()} />);
+    open();
+    receive(prepSnapshot());
+  };
+
+  it("connects to the preparation of the scene, not to the table", () => {
+    render(<TablePage worldId="w1" prepareSceneId="s1" onLeave={vi.fn()} />);
+    expect(socket().url).toMatch(/^wss?:\/\/.+\/api\/worlds\/w1\/scenes\/s1\/prepare$/);
+  });
+
+  it("has no chat and no players, and no way to move everyone to another scene", () => {
+    prepare();
+    expect(screen.queryByRole("button", { name: "Chat e dadi" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Giocatori" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scene" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Token" })).toBeTruthy();
+    expect(screen.getByText("Preparazione: Sala comune")).toBeTruthy();
+  });
+
+  it("has the tools of the DM, the start zone, and no pointer", () => {
+    prepare();
+    const names = within(screen.getByRole("toolbar", { name: "Strumenti" })).getAllByRole("button").map((b) => b.getAttribute("aria-label"));
+    expect(names).toEqual(["Sposta", "Seleziona", "Misura", "Testo", "Zona di partenza"]);
+    press("z");
+    expect(tool()).toBe("start");
+    press("q");
+    expect(tool()).toBe("start");
+  });
+
+  it("shows the start zone from the beginning", () => {
+    prepare();
+    expect(screen.getByTestId("board").dataset["showStart"]).toBe("true");
+  });
+
+  it("the table has no start zone tool", () => {
+    sit("dm");
+    expect(screen.queryByRole("button", { name: "Zona di partenza" })).toBeNull();
+    press("z");
+    expect(tool()).toBe("move");
+  });
+
+  it("a start zone drawn on the map is saved on the scene", async () => {
+    const server = fakeServer({ ...world, "PATCH /api/worlds/w1/scenes/s1/table": [{ status: 200, body: { scene: { mapImageId: null, mapWidth: null, mapHeight: null, gridPx: 70, gridOffsetX: 0, gridOffsetY: 0, start: { x: 1, y: 2, w: 3, h: 4 } } } }] });
+    prepare();
+    act(() => { theBoard().onStartZone({ x: 1, y: 2, w: 3, h: 4 }); });
+    await waitFor(() => { expect(server.bodies["PATCH /api/worlds/w1/scenes/s1/table"]).toEqual([{ start: { x: 1, y: 2, w: 3, h: 4 } }]); });
+  });
+
+  it("says so when the start zone could not be saved", async () => {
+    fakeServer({ ...world, "PATCH /api/worlds/w1/scenes/s1/table": [{ status: 500 }] });
+    prepare();
+    act(() => { theBoard().onStartZone({ x: 1, y: 2, w: 3, h: 4 }); });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+  });
+
+  it("the controls of the scene have no 'bring everyone to my view'", async () => {
+    prepare();
+    fireEvent.click(screen.getByRole("button", { name: "Controlli della scena" }));
+    await screen.findByRole("button", { name: "Salva mappa e griglia" });
+    expect(screen.queryByRole("button", { name: "Porta tutti alla mia vista" })).toBeNull();
   });
 });
 

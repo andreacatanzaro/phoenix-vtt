@@ -26,6 +26,13 @@ export function ToolOptions({ tool, selectMode, onSelectMode, measureMode, onMea
       </div>
     );
   }
+  if (tool === "start") {
+    return (
+      <div className="hud hud-tc">
+        <p className="hud-pill muted small" role="status">{t("ui.world.table.toolbar.start-hint")}</p>
+      </div>
+    );
+  }
   if (tool === "measure") {
     return (
       <div className="hud hud-tc">

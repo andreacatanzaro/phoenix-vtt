@@ -110,7 +110,8 @@ export function connectTable(url: string, handlers: ConnectionHandlers, deps: Co
   };
 }
 
-/** The address of the table of a world, on the same host as the page. */
-export function tableUrl(worldId: string, location: { protocol: string; host: string }): string {
-  return `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/worlds/${encodeURIComponent(worldId)}/table`;
+/** The address of the table of a world, or of the preparation of one of its scenes, on the same host as the page. */
+export function tableUrl(worldId: string, location: { protocol: string; host: string }, prepareSceneId?: string): string {
+  const root = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/worlds/${encodeURIComponent(worldId)}`;
+  return prepareSceneId === undefined ? `${root}/table` : `${root}/scenes/${encodeURIComponent(prepareSceneId)}/prepare`;
 }

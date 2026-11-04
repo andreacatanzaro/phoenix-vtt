@@ -22,6 +22,11 @@ describe("ToolOptions", () => {
     }
   });
 
+  it("says what the start zone tool does, since it has no options", () => {
+    setup("start");
+    expect(screen.getByRole("status").textContent).toBe("Trascina sulla mappa per disegnare la zona dove arrivano i giocatori.");
+  });
+
   it("offers rectangle and lasso for Select, marks the one in use and switches", () => {
     const { onSelectMode } = setup("select", { selectMode: "lasso" });
     expect(screen.getByRole("button", { name: "Selezione a rettangolo" }).getAttribute("aria-pressed")).toBe("false");

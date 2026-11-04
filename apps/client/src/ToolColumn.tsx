@@ -2,7 +2,7 @@ import { t } from "@phoenix/shared";
 import { Icon, type IconName } from "./Icons";
 import { TOOL_KEYS, type Tool } from "./table/tools";
 
-const ICONS: Record<Tool, IconName> = { move: "move", select: "select", measure: "measure", pointer: "pointer", text: "text" };
+const ICONS: Record<Tool, IconName> = { move: "move", select: "select", measure: "measure", pointer: "pointer", text: "text", start: "zone" };
 
 type Props = {
   tools: readonly Tool[];

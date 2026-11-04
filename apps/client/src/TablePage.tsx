@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CELL_METERS, isMessageKey, t, type MemberView, type TableCommand } from "@phoenix/shared";
 import { api } from "./api";
+import { errorText } from "./messages";
 import { Board, type BoardHandle } from "./Board";
 import { ChatPanel } from "./ChatPanel";
 import { Icon, type IconName } from "./Icons";
@@ -14,7 +15,7 @@ import type { BoardMove } from "./table/board-view";
 import { draftStyle } from "./table/draft";
 import { samePoint, type Point } from "./table/geometry";
 import { formatMeters } from "./table/measure";
-import { isTypingTarget, toolForKey, TOOL_KEYS, TOOLS, type MeasureMode, type SelectMode, type Tool } from "./table/tools";
+import { isTypingTarget, toolForKey, toolsFor, TOOL_KEYS, type MeasureMode, type SelectMode, type Tool } from "./table/tools";
 import { TokenDetailsPanel, TokensPanel } from "./TokenPanel";
 import { ToolColumn } from "./ToolColumn";
 import { ToolOptions } from "./ToolOptions";
@@ -27,8 +28,10 @@ type Panel = "players" | "chat" | "tokens" | "details" | "scenes";
  * Top left the menu and the panels it opens, top middle the options of the tool, on the right the tools, at the bottom
  * the bar to add to the table (the DM's) and the scale with the controls of the scene.
  */
-export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () => void }) {
-  const { state, send, clearError, refresh } = useTable(worldId);
+export function TablePage({ worldId, prepareSceneId, onLeave }: { worldId: string; prepareSceneId?: string; onLeave: () => void }) {
+  const { state, send, clearError, refresh } = useTable(worldId, prepareSceneId);
+  // The preparation of a scene (the DM, before the session): the same screen without chat, players or other scenes.
+  const preparing = prepareSceneId !== undefined;
   const board = useRef<BoardHandle>(null);
   const [tool, setTool] = useState<Tool>("move");
   const [selectMode, setSelectMode] = useState<SelectMode>("rectangle");
@@ -38,7 +41,8 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
   const [controlsOpen, setControlsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
-  const [showStart, setShowStart] = useState(false);
+  const [showStart, setShowStart] = useState(prepareSceneId !== undefined);
+  const [notice, setNotice] = useState<string | null>(null);
   const [resetViewSeq, setResetViewSeq] = useState(0);
   const [view, setView] = useState<{ x: number; y: number; zoom: number } | null>(null);
   const [anchor, setAnchor] = useState<Point | null>(null);
@@ -54,7 +58,7 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
 
   const { me, scene } = state;
   const isDm = me?.role === "dm";
-  const tools = useMemo(() => TOOLS.filter((name) => name !== "text" || isDm), [isDm]);
+  const tools = useMemo(() => toolsFor({ isDm, preparing }), [isDm, preparing]);
   // What is selected only counts while it is on the board: a token that goes away leaves the selection.
   const selected = useMemo(() => state.tokens.filter((tk) => selectedIds.has(tk.id)), [state.tokens, selectedIds]);
   const selectedSet = useMemo(() => new Set(selected.map((tk) => tk.id)), [selected]);
@@ -109,12 +113,15 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
   if (me === null || state.session === null) {
     return (
       <div className="stage">
-        <p className="muted stage-message" role="status">{t(state.connection === "reconnecting" ? "ui.world.table.connection.reconnecting" : "ui.world.table.connection.connecting")}</p>
+        <div className="stack centered stage-message">
+          <p className="muted" role="status">{t(state.connection === "reconnecting" ? "ui.world.table.connection.reconnecting" : "ui.world.table.connection.connecting")}</p>
+          <button type="button" className="btn quiet" onClick={onLeave}>{t("ui.world.table.hud.exit")}</button>
+        </div>
       </div>
     );
   }
 
-  const error = state.error === null ? null : isMessageKey(state.error) ? t(state.error) : t("errors.unavailable");
+  const error = notice ?? (state.error === null ? null : isMessageKey(state.error) ? t(state.error) : t("errors.unavailable"));
   const people = members.map((m) => ({ accountId: m.accountId, username: m.username }));
   const open = (name: Panel): void => {
     setPanel((current) => (current === name ? null : name));
@@ -128,6 +135,16 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
     let sentAll = true;
     for (const m of moves) if (!send({ type: "token.move", tokenId: m.id, x: m.x, y: m.y })) sentAll = false;
     if (!sentAll) refresh();
+  };
+
+  /** The start zone was drawn on the map: it is saved on the scene, and the server shows it back to everyone preparing it. */
+  const saveZone = async (zone: { x: number; y: number; w: number; h: number }): Promise<void> => {
+    if (scene === null) return;
+    try {
+      await api.updateSceneTable(worldId, scene.id, { start: zone });
+    } catch (e) {
+      setNotice(errorText(e));
+    }
   };
 
   const write = (): void => {
@@ -173,6 +190,7 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
           onPlaceText={(cell, at) => { setDraft({ cell, at, text: "" }); }}
           onView={setView}
           onAnchor={(at) => { setAnchor((now) => (samePoint(now, at) ? now : at)); }}
+          onStartZone={(zone) => { void saveZone(zone); }}
         />
       )}
 
@@ -181,9 +199,9 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
           <button type="button" className="hud-btn" data-tip={t("ui.world.table.hud.exit")} aria-label={t("ui.world.table.hud.exit")} onClick={onLeave}>
             <Icon name="exit" />
           </button>
-          <span className="hud-title">{state.session.title}</span>
-          {pillButton("players", "players", t("ui.world.table.hud.players"))}
-          {pillButton("chat", "chat", t("ui.world.table.hud.chat"))}
+          <span className="hud-title">{preparing ? t("ui.world.table.prepare.title", { scene: state.session.title }) : state.session.title}</span>
+          {!preparing && pillButton("players", "players", t("ui.world.table.hud.players"))}
+          {!preparing && pillButton("chat", "chat", t("ui.world.table.hud.chat"))}
           {!isDm && pillButton("tokens", "token", t("ui.world.table.hud.tokens"))}
         </div>
         {state.connection !== "live" && (
@@ -204,7 +222,7 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
       {error !== null && (
         <p className="notice hud-notice" role="alert">
           {error}{" "}
-          <button type="button" className="btn text" onClick={clearError}>OK</button>
+          <button type="button" className="btn text" onClick={() => { setNotice(null); clearError(); }}>OK</button>
         </p>
       )}
 
@@ -216,12 +234,14 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
 
       {isDm && scene !== null && (
         <div className="hud hud-bc">
-          {panel === "scenes" && <ScenesPanel worldId={worldId} scene={scene} send={send} />}
+          {panel === "scenes" && !preparing && <ScenesPanel worldId={worldId} scene={scene} send={send} />}
           {panel === "tokens" && <TokensPanel worldId={worldId} scene={scene} me={me} tokens={state.tokens} selectedIds={selectedSet} onSelect={(id) => { setSelectedIds(new Set([id])); setPanel("details"); }} people={people} send={send} />}
           <div className="hud-pill" role="toolbar" aria-label={t("ui.world.table.hud.dock")}>
-            <button type="button" className="hud-btn" aria-pressed={panel === "scenes"} data-tip={t("ui.world.table.hud.scenes")} aria-label={t("ui.world.table.hud.scenes")} onClick={() => { open("scenes"); }}>
-              <Icon name="scenes" />
-            </button>
+            {!preparing && (
+              <button type="button" className="hud-btn" aria-pressed={panel === "scenes"} data-tip={t("ui.world.table.hud.scenes")} aria-label={t("ui.world.table.hud.scenes")} onClick={() => { open("scenes"); }}>
+                <Icon name="scenes" />
+              </button>
+            )}
             <button type="button" className="hud-btn" aria-pressed={panel === "tokens"} data-tip={t("ui.world.table.hud.tokens")} aria-label={t("ui.world.table.hud.tokens")} onClick={() => { open("tokens"); }}>
               <Icon name="token" />
             </button>
@@ -247,6 +267,7 @@ export function TablePage({ worldId, onLeave }: { worldId: string; onLeave: () =
             isDm={isDm}
             showStart={showStart}
             onShowStart={setShowStart}
+            preparing={preparing}
             view={view}
             onSetView={(x, y, zoom) => { board.current?.setView({ x, y }, zoom); }}
             onResetView={() => { setResetViewSeq((n) => n + 1); }}

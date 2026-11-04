@@ -149,6 +149,10 @@ export const api = {
   async sceneTable(worldId: string, sceneId: string): Promise<SceneTableView> {
     return (await call("GET", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema)).scene;
   },
+  /** Whether this scene is the one being played in the running session (DM only): that one is not prepared. */
+  async sceneInPlay(worldId: string, sceneId: string): Promise<boolean> {
+    return (await call("GET", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema)).inPlay;
+  },
   async updateSceneTable(worldId: string, sceneId: string, patch: SceneTableInput): Promise<SceneTableView> {
     return (await call("PATCH", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema, patch)).scene;
   },

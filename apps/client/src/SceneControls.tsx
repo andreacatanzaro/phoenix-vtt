@@ -21,6 +21,8 @@ type Props = {
   onSyncView: () => void;
   /** Starts aligning the map to the grid (DM only; needs a map). */
   onAlign: () => void;
+  /** Preparing a scene: nobody else is there, so there is nobody to bring to this view. */
+  preparing?: boolean;
 };
 
 function NumberField({ label, value, onChange, min, max, step }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number; step?: number | "any" }) {
@@ -36,7 +38,7 @@ function NumberField({ label, value, onChange, min, max, step }: { label: string
  * The panel behind the scale button, like "Scene Controls" on Owlbear Rodeo: the grid and the view. The grid, the map and
  * the start zone are the DM's; the view (where you look, zoom, back to the whole board) is everyone's.
  */
-export function SceneControls({ worldId, scene, isDm, showStart, onShowStart, view, onSetView, onResetView, onSyncView, onAlign }: Props) {
+export function SceneControls({ worldId, scene, isDm, showStart, onShowStart, view, onSetView, onResetView, onSyncView, onAlign, preparing = false }: Props) {
   const [form, setForm] = useState<Form | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,6 +53,14 @@ export function SceneControls({ worldId, scene, isDm, showStart, onShowStart, vi
   useEffect(() => {
     if (!typing.current) setPlace(view);
   }, [view]);
+
+  // The start zone of the scene changed under the form (it was drawn on the map): the form follows it, or saving the grid
+  // would send the old one back. The grid fields are left alone, they may be half typed.
+  const zone = scene?.start;
+  useEffect(() => {
+    if (zone === undefined) return;
+    setForm((f) => (f === null || (f.startX === zone.x && f.startY === zone.y && f.startW === zone.w && f.startH === zone.h) ? f : { ...f, startX: zone.x, startY: zone.y, startW: zone.w, startH: zone.h }));
+  }, [zone?.x, zone?.y, zone?.w, zone?.h]);
 
   useEffect(() => {
     setSaved(false);
@@ -153,7 +163,7 @@ export function SceneControls({ worldId, scene, isDm, showStart, onShowStart, vi
               <Icon name="reset" />
               {t("ui.world.table.controls.reset-view")}
             </button>
-            {isDm && (
+            {isDm && !preparing && (
               <button type="button" className="btn quiet small" onClick={onSyncView}>
                 <Icon name="sync" />
                 {t("ui.world.table.controls.sync-view")}

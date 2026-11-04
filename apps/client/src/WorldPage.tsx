@@ -4,6 +4,7 @@ import { AtlasPanel } from "./AtlasPanel";
 import { Ornament } from "./Decor";
 import { MembersPanel } from "./MembersPanel";
 import { SessionsPanel } from "./SessionsPanel";
+import { TablePage } from "./TablePage";
 import { TablePanel } from "./TablePanel";
 
 type Section = "structure" | "members" | "sessions" | "table";
@@ -15,6 +16,9 @@ export function WorldPage({ world, onBack }: { world: WorldView; onBack: () => v
   const [section, setSection] = useState<Section>("structure");
   // Sitting at the table takes the whole screen: the world's header and tabs step aside.
   const [seated, setSeated] = useState(false);
+  // Preparing a scene also takes the whole screen: it is the table, before the session.
+  const [preparing, setPreparing] = useState<string | null>(null);
+  if (preparing !== null) return <TablePage worldId={world.id} prepareSceneId={preparing} onLeave={() => { setPreparing(null); }} />;
   if (seated) return <TablePanel worldId={world.id} seated onSeated={setSeated} />;
   return (
     <>
@@ -32,7 +36,7 @@ export function WorldPage({ world, onBack }: { world: WorldView; onBack: () => v
         ))}
       </nav>
       <div>
-        {section === "structure" && <AtlasPanel worldId={world.id} isDm={isDm} />}
+        {section === "structure" && <AtlasPanel worldId={world.id} isDm={isDm} onPrepare={setPreparing} />}
         {section === "members" && <MembersPanel worldId={world.id} isDm={isDm} />}
         {section === "sessions" && <SessionsPanel worldId={world.id} isDm={isDm} />}
         {section === "table" && <TablePanel worldId={world.id} seated={false} onSeated={setSeated} />}

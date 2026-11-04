@@ -152,7 +152,7 @@ export type TableClient = {
 };
 
 /** Connects to the live table the way a browser would, and parses every event against the shared schema. */
-export async function openTable(app: FastifyInstance, worldId: string, token: string): Promise<TableClient> {
+export async function openTable(app: FastifyInstance, worldId: string, token: string, path = "table"): Promise<TableClient> {
   const events: TableEvent[] = [];
   const listeners = new Set<() => void>();
   let resolveClosed: (code: number) => void = () => undefined;
@@ -160,7 +160,7 @@ export async function openTable(app: FastifyInstance, worldId: string, token: st
     resolveClosed = resolve;
   });
   // Listeners go on before the connection opens: the server sends the snapshot the moment it is open.
-  const ws = await app.injectWS(`/api/worlds/${worldId}/table`, { headers: { cookie: `phoenix_session=${token}` } }, { onInit: (socket) => {
+  const ws = await app.injectWS(`/api/worlds/${worldId}/${path}`, { headers: { cookie: `phoenix_session=${token}` } }, { onInit: (socket) => {
     socket.on("message", (raw: Buffer) => {
       events.push(tableEventSchema.parse(JSON.parse(raw.toString("utf8"))));
       for (const l of [...listeners]) l();

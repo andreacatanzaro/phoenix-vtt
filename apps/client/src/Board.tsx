@@ -103,6 +103,7 @@ export function Board(props: Props) {
       onView: (v) => { latest.current.onView(v); },
       onAnchor: (at) => { latest.current.onAnchor(at); },
       onAlign: (state) => { latest.current.onAlign(state); },
+      onStartZone: (zone) => { latest.current.onStartZone(zone); },
     }).then((board) => {
       if (cancelled) {
         board.destroy();

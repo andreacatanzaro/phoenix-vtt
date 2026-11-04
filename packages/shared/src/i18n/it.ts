@@ -235,6 +235,7 @@ export const it = {
         visible: "Visibile ai giocatori",
         hidden: "Nascosto ai giocatori",
         edit: "Modifica",
+        prepare: "Prepara la scena",
         cancel: "Annulla",
         save: "Salva",
         delete: "Elimina",
@@ -297,6 +298,9 @@ export const it = {
       you: "tu",
       "board-help": "Mappa del tavolo. Frecce: sposta la vista. Più e meno: ingrandisci e riduci. Per scegliere e muovere i token usa l'elenco dei token.",
       "map-hint": "Trascina un token per muoverlo, la mappa per spostarla, la rotella per ingrandire.",
+      prepare: {
+        title: "Preparazione: {scene}",
+      },
       toolbar: {
         label: "Strumenti",
         toggle: "Mostra o nascondi gli strumenti",
@@ -305,6 +309,8 @@ export const it = {
         measure: "Misura",
         pointer: "Puntatore",
         text: "Testo",
+        start: "Zona di partenza",
+        "start-hint": "Trascina sulla mappa per disegnare la zona dove arrivano i giocatori.",
         "select-rectangle": "Selezione a rettangolo",
         "select-lasso": "Selezione a mano libera",
         "measure-ruler": "Righello",
@@ -501,6 +507,8 @@ export const it = {
       "not-your-token": "Puoi muovere solo i tuoi token.",
       "bad-target": "L'elemento indicato non esiste o non si può usare qui.",
       "no-exit": "Da questa scena non parte un'uscita verso quella scelta.",
+      "scene-in-play": "Questa scena è in gioco al tavolo: si modifica dal tavolo, non in preparazione.",
+      "prepare-only": "In preparazione questo comando non è disponibile.",
     },
     session: {
       "wrong-status": "Questa operazione non è possibile nello stato attuale della sessione.",

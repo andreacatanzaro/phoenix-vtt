@@ -5,7 +5,8 @@ import { CHILD_OF, branches, indexTree, sceneOptions, type Branch, type Entry } 
 import { useGuarded } from "./useGuarded";
 
 /** Structure of a world: the tree on the left, what is selected on the right. The DM edits; a player only reads. */
-export function AtlasPanel({ worldId, isDm }: { worldId: string; isDm: boolean }) {
+/** `onPrepare` opens the preparation of a scene (DM only): the table screen on that scene, without a session. */
+export function AtlasPanel({ worldId, isDm, onPrepare }: { worldId: string; isDm: boolean; onPrepare: (sceneId: string) => void }) {
   const [tree, setTree] = useState<WorldTree | null>(null);
   const [links, setLinks] = useState<SceneLinkView[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -64,6 +65,7 @@ export function AtlasPanel({ worldId, isDm }: { worldId: string; isDm: boolean }
               onPick={setSelected}
               onChange={reload}
               onGone={() => { setSelected(shown.parentId); }}
+              onPrepare={onPrepare}
             />
           ) : (
             <p className="muted">{t("ui.world.structure.pick")}</p>
@@ -103,9 +105,12 @@ function TreeItem({ branch, collection, isDm, selectedId, folded, onPick, onTogg
   );
 }
 
-function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone }: { worldId: string; entry: Entry; isDm: boolean; links: SceneLinkView[]; tree: WorldTree; onPick: (id: string) => void; onChange: () => Promise<void>; onGone: () => void }) {
+function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, onPrepare }: { worldId: string; entry: Entry; isDm: boolean; links: SceneLinkView[]; tree: WorldTree; onPick: (id: string) => void; onChange: () => Promise<void>; onGone: () => void; onPrepare: (sceneId: string) => void }) {
   const { error, run } = useGuarded();
   const { node, collection } = entry;
+  // Preparing a scene that is in play was refused: said here, and the DM stays where they are.
+  const [inPlay, setInPlay] = useState(false);
+  useEffect(() => { setInPlay(false); }, [node.id]);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(node.name);
   const [description, setDescription] = useState(node.description);
@@ -142,6 +147,16 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone }:
       await onChange();
     }
   }
+
+  /** Asks first whether the scene is in play: the table would refuse it, and the screen it opens has no way out while it retries. */
+  const prepare = async (): Promise<void> => {
+    setInPlay(false);
+    const answer = { busy: false };
+    const asked = await run(async () => { answer.busy = await api.sceneInPlay(worldId, node.id); });
+    if (!asked) return;
+    if (answer.busy) setInPlay(true);
+    else onPrepare(node.id);
+  };
 
   return (
     <article className="detail framed">
@@ -215,6 +230,12 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone }:
         </section>
       )}
 
+      {isDm && collection === "scenes" && (
+        <div>
+          <button type="button" className="btn" onClick={() => { void prepare(); }}>{t("ui.world.structure.prepare")}</button>
+          {inPlay && <p role="alert" className="notice">{t("errors.table.scene-in-play")}</p>}
+        </div>
+      )}
       {isDm && collection === "scenes" && <Exits worldId={worldId} sceneId={node.id} links={links} tree={tree} onChange={onChange} />}
     </article>
   );

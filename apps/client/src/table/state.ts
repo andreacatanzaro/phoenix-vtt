@@ -10,6 +10,8 @@ export type TableState = {
   connection: "connecting" | "live" | "reconnecting" | "ended";
   me: Me | null;
   session: { id: string; title: string } | null;
+  /** Whether this is the live table or the preparation of a scene (no session, no chat). */
+  mode: "play" | "prepare";
   scene: TableScene | null;
   tokens: TokenView[];
   messages: MessageView[];
@@ -23,7 +25,7 @@ export type TableState = {
   viewRequest: { x: number; y: number; zoom: number; seq: number } | null;
 };
 
-export const initialState: TableState = { connection: "connecting", me: null, session: null, scene: null, tokens: [], messages: [], present: [], error: null, revision: 0, pointers: new Map(), viewRequest: null };
+export const initialState: TableState = { connection: "connecting", me: null, session: null, mode: "play", scene: null, tokens: [], messages: [], present: [], error: null, revision: 0, pointers: new Map(), viewRequest: null };
 
 /** `at` is the moment the event arrived (ms), given by whoever receives it, so the reducer stays pure. */
 export type Action = { type: "event"; event: TableEvent; at: number } | { type: "connection"; status: TableState["connection"] } | { type: "clear-error" }
@@ -38,7 +40,7 @@ export function reduce(state: TableState, action: Action): TableState {
   const next = { ...state, revision: state.revision + 1 };
   switch (event.type) {
     case "snapshot":
-      return { ...next, connection: "live", me: event.you, session: event.session, scene: event.scene, tokens: event.tokens, messages: event.messages.slice(-MAX_MESSAGES), present: event.present, error: null, pointers: new Map() };
+      return { ...next, connection: "live", me: event.you, session: event.session, mode: event.mode ?? "play", scene: event.scene, tokens: event.tokens, messages: event.messages.slice(-MAX_MESSAGES), present: event.present, error: null, pointers: new Map() };
     case "token.upserted": {
       // A token of another scene is not on this board.
       if (state.scene === null || event.token.sceneId !== state.scene.id) return next;

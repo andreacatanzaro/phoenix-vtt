@@ -1,6 +1,6 @@
 import type { TokenView } from "@phoenix/shared";
 import { describe, expect, it } from "vitest";
-import { boardSize, cellAt, clampCell, duplicateSpot, fitView, groupDrop, keepCenterOnResize, MAX_ZOOM, MIN_ZOOM, panBy, samePoint, textCells, toScene, toScreen, tokenAt, tokenRect, viewCenter, viewFor, zoomAt } from "./geometry";
+import { boardSize, cellAt, clampCell, duplicateSpot, fitView, groupDrop, keepCenterOnResize, MAX_ZOOM, MIN_ZOOM, cellRectBetween, panBy, samePoint, textCells, toScene, toScreen, tokenAt, tokenRect, viewCenter, viewFor, zoomAt } from "./geometry";
 
 const scene = { gridPx: 70, gridOffsetX: 10, gridOffsetY: 20, mapWidth: 1400, mapHeight: 700 };
 const tok = (id: string, x: number, y: number, size = 1): TokenView => ({ id, sceneId: "s", kind: "token", label: id, color: "gold", imageId: null, x, y, size, hidden: false, travels: false, ownerAccountId: null });
@@ -205,5 +205,30 @@ describe("samePoint", () => {
     expect(samePoint(null, null)).toBe(true);
     expect(samePoint(null, { x: 0, y: 0 })).toBe(false);
     expect(samePoint({ x: 0, y: 0 }, null)).toBe(false);
+  });
+});
+
+describe("cellRectBetween", () => {
+  // The grid of the fixture: squares of 70 pixels, the first one starting at (10, 20).
+  it("covers the squares of both corners, whichever way it is drawn", () => {
+    expect(cellRectBetween(scene, { x: 15, y: 25 }, { x: 15 + 70 * 2, y: 25 + 70 })).toEqual({ x: 0, y: 0, w: 3, h: 2 });
+    expect(cellRectBetween(scene, { x: 15 + 70 * 2, y: 25 + 70 }, { x: 15, y: 25 })).toEqual({ x: 0, y: 0, w: 3, h: 2 });
+  });
+
+  it("is one square when both points are in the same square", () => {
+    expect(cellRectBetween(scene, { x: 100, y: 100 }, { x: 110, y: 105 })).toEqual({ x: 1, y: 1, w: 1, h: 1 });
+  });
+
+  it("works for squares before the first one", () => {
+    expect(cellRectBetween(scene, { x: -100, y: -50 }, { x: 5, y: 5 })).toEqual({ x: -2, y: -1, w: 2, h: 1 });
+  });
+
+  it("never goes beyond the biggest start zone, nor beyond the coordinates a start zone may have", () => {
+    const far = cellRectBetween(scene, { x: 0, y: 0 }, { x: 70 * 200, y: 70 * 200 });
+    expect(far.w).toBe(64);
+    expect(far.h).toBe(64);
+    const out = cellRectBetween(scene, { x: 70 * 900, y: 70 * 900 }, { x: 70 * 901, y: 70 * 901 });
+    expect(out.x).toBe(500);
+    expect(out.y).toBe(500);
   });
 });

@@ -8,6 +8,7 @@ import type { Database } from "../db/types";
 import { playerMaySeeImage } from "../image-access";
 import { fail, parseBody } from "../http";
 import { readImageInfo } from "../image-info";
+import { runningSession } from "../table/store";
 import type { ImageStore } from "../image-store";
 
 const worldParams = z.object({ worldId: z.string() });
@@ -96,7 +97,9 @@ export function imageRoutes(app: FastifyInstance, db: Database, store: ImageStor
     const row = rows[0];
     if (row === undefined) return fail(reply, 404, "not-found");
     const map = row.mapImageId === null ? null : ((await db.select({ width: images.width, height: images.height }).from(images).where(eq(images.id, row.mapImageId)).limit(1))[0] ?? null);
-    return { scene: sceneView(row, map) };
+    // Whether this is the scene being played: that one is edited at the table, not prepared.
+    const running = await runningSession(db, access.worldId);
+    return { scene: sceneView(row, map), inPlay: running?.currentSceneId === row.id };
   });
 
   app.patch("/api/worlds/:worldId/scenes/:sceneId/table", async (request, reply) => {

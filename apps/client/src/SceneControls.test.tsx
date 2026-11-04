@@ -19,6 +19,47 @@ function setup(over: Partial<Parameters<typeof SceneControls>[0]> = {}, routes: 
   return { server, ...handlers };
 }
 
+describe("SceneControls when the scene changes under it", () => {
+  const handlers = () => ({ onShowStart: vi.fn(), onSetView: vi.fn(), onResetView: vi.fn(), onSyncView: vi.fn(), onAlign: vi.fn() });
+  const controls = (over: Partial<typeof scene>, h: ReturnType<typeof handlers>) => <SceneControls worldId="w1" scene={{ ...scene, ...over }} isDm showStart={false} view={null} {...h} />;
+
+  it("shows a start zone drawn on the map, and saving the grid does not bring the old one back", async () => {
+    const server = fakeServer({ "GET /api/worlds/w1/scenes/s1/table": [{ status: 200, body: setupBody }], "PATCH /api/worlds/w1/scenes/s1/table": [{ status: 200, body: setupBody }] });
+    const h = handlers();
+    const { rerender } = render(controls({}, h));
+    await waitFor(() => { expect(inputLabelled("Colonna").value).toBe("2"); });
+    rerender(controls({ start: { x: 5, y: 6, w: 7, h: 8 } }, h));
+    await waitFor(() => { expect(inputLabelled("Colonna").value).toBe("5"); });
+    expect(inputLabelled("Riga").value).toBe("6");
+    expect(inputLabelled("Larghezza").value).toBe("7");
+    expect(inputLabelled("Altezza").value).toBe("8");
+    fireEvent.change(inputLabelled("Lato del quadretto in pixel"), { target: { value: "90" } });
+    fireEvent.click(buttonNamed("Salva mappa e griglia"));
+    await screen.findByText("Salvato.");
+    expect(server.bodies["PATCH /api/worlds/w1/scenes/s1/table"]).toEqual([{ gridPx: 90, gridOffsetX: 5, gridOffsetY: 6, start: { x: 5, y: 6, w: 7, h: 8 } }]);
+  });
+
+  it("keeps what was typed in the grid when only the start zone changes", async () => {
+    fakeServer({ "GET /api/worlds/w1/scenes/s1/table": [{ status: 200, body: setupBody }] });
+    const h = handlers();
+    const { rerender } = render(controls({}, h));
+    await waitFor(() => { expect(inputLabelled("Lato del quadretto in pixel").value).toBe("70"); });
+    fireEvent.change(inputLabelled("Lato del quadretto in pixel"), { target: { value: "88" } });
+    rerender(controls({ start: { x: 5, y: 6, w: 7, h: 8 } }, h));
+    await waitFor(() => { expect(inputLabelled("Colonna").value).toBe("5"); });
+    expect(inputLabelled("Lato del quadretto in pixel").value).toBe("88");
+  });
+});
+
+describe("SceneControls while preparing", () => {
+  it("has no 'bring everyone to my view', since nobody else is there", async () => {
+    setup({ preparing: true });
+    await waitFor(() => { expect(inputLabelled("Spostamento orizzontale").value).toBe("5"); });
+    expect(screen.queryByRole("button", { name: "Porta tutti alla mia vista" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Ripristina la vista" })).toBeTruthy();
+  });
+});
+
 describe("a grid with decimals", () => {
   it("is shown and typed in as it is, since aligning a map gives decimals", async () => {
     setup({}, { "GET /api/worlds/w1/scenes/s1/table": [{ status: 200, body: { scene: { ...setupBody.scene, gridPx: 79.4, gridOffsetX: 5.6, gridOffsetY: 33.1 } } }] });

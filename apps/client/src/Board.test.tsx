@@ -45,7 +45,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const callbacks = () => ({ onSelect: vi.fn(), onMove: vi.fn(), onPointer: vi.fn(), onPlaceText: vi.fn(), onView: vi.fn(), onAnchor: vi.fn(), onAlign: vi.fn() });
+const callbacks = () => ({ onSelect: vi.fn(), onMove: vi.fn(), onPointer: vi.fn(), onPlaceText: vi.fn(), onView: vi.fn(), onAnchor: vi.fn(), onAlign: vi.fn(), onStartZone: vi.fn() });
 const baseProps = () => ({
   worldId: "w1",
   scene,
@@ -125,6 +125,8 @@ describe("Board", () => {
     c.onView({ x: 1, y: 2, zoom: 3 });
     c.onAnchor({ x: 5, y: 6 });
     c.onAlign({ anchor: { x: 7, y: 8 }, size: 90 });
+    c.onStartZone({ x: 1, y: 2, w: 3, h: 4 });
+    expect(two.onStartZone).toHaveBeenCalledWith({ x: 1, y: 2, w: 3, h: 4 });
     expect(two.onAlign).toHaveBeenCalledWith({ anchor: { x: 7, y: 8 }, size: 90 });
     expect(one.onAlign).not.toHaveBeenCalled();
     expect(two.onSelect).toHaveBeenCalledWith(["a"]);
