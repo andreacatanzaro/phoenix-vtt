@@ -24,9 +24,10 @@ export const MAX_START_COORDINATE = 500;
 export const sceneTableSchema = z
   .object({
     mapImageId: z.uuid().nullable(),
-    gridPx: z.number().int().min(MIN_GRID_PX).max(MAX_GRID_PX),
-    gridOffsetX: z.number().int().min(-4000).max(4000),
-    gridOffsetY: z.number().int().min(-4000).max(4000),
+    // Decimals are allowed: aligning a map corrects a drift over many squares, which whole pixels cannot do.
+    gridPx: z.number().min(MIN_GRID_PX).max(MAX_GRID_PX),
+    gridOffsetX: z.number().min(-4000).max(4000),
+    gridOffsetY: z.number().min(-4000).max(4000),
     start: z.object({ x: z.number().int().min(-MAX_START_COORDINATE).max(MAX_START_COORDINATE), y: z.number().int().min(-MAX_START_COORDINATE).max(MAX_START_COORDINATE), w: z.number().int().min(1).max(MAX_START_SIDE), h: z.number().int().min(1).max(MAX_START_SIDE) }),
   })
   .partial()
@@ -49,12 +50,18 @@ export const sceneTableResponseSchema = z.object({ scene: sceneTableViewSchema }
 export const TOKEN_COLORS = ["gold", "green", "red", "blue", "violet", "grey", "white", "black"] as const;
 export type TokenColor = (typeof TOKEN_COLORS)[number];
 export const TOKEN_LABEL_MAX_LENGTH = 40;
+/** A piece of text written on the map. */
+export const TEXT_MAX_LENGTH = 200;
+/** What a token is on the board: a figure (circle with a name) or a line of text. */
+export const TOKEN_KINDS = ["token", "text"] as const;
+export type TokenKind = (typeof TOKEN_KINDS)[number];
 export const MAX_TOKEN_SIZE = 8;
 export const MAX_COORDINATE = 1000;
 
 export const tokenViewSchema = z.object({
   id: z.string(),
   sceneId: z.string(),
+  kind: z.enum(TOKEN_KINDS),
   label: z.string(),
   color: z.enum(TOKEN_COLORS),
   imageId: z.string().nullable(),
@@ -108,22 +115,29 @@ export const presenceSchema = z.object({ accountId: z.string(), username: z.stri
 // ---- what the client sends ----
 
 const coordinate = z.number().int().min(-MAX_COORDINATE).max(MAX_COORDINATE);
-const label = z.string().trim().min(1).max(TOKEN_LABEL_MAX_LENGTH);
+const label = z.string().trim().min(1).max(TEXT_MAX_LENGTH);
+/** A name is short, a text may be long: the limit depends on what it is. */
+const fitsKind = (kind: TokenKind, text: string): boolean => text.length <= (kind === "text" ? TEXT_MAX_LENGTH : TOKEN_LABEL_MAX_LENGTH);
+/** Where the pointer or the camera is, in pixels of the scene (not squares): a free position. */
+const scenePixel = z.number().min(-100000).max(100000);
 
 export const tableCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("token.move"), tokenId: z.uuid(), x: coordinate, y: coordinate }),
-  z.object({
-    type: z.literal("token.add"),
-    label,
-    color: z.enum(TOKEN_COLORS).default("gold"),
-    x: coordinate,
-    y: coordinate,
-    size: z.number().int().min(1).max(MAX_TOKEN_SIZE).default(1),
-    hidden: z.boolean().default(false),
-    travels: z.boolean().default(false),
-    ownerAccountId: z.uuid().nullable().default(null),
-    imageId: z.uuid().nullable().default(null),
-  }),
+  z
+    .object({
+      type: z.literal("token.add"),
+      kind: z.enum(TOKEN_KINDS).default("token"),
+      label,
+      color: z.enum(TOKEN_COLORS).default("gold"),
+      x: coordinate,
+      y: coordinate,
+      size: z.number().int().min(1).max(MAX_TOKEN_SIZE).default(1),
+      hidden: z.boolean().default(false),
+      travels: z.boolean().default(false),
+      ownerAccountId: z.uuid().nullable().default(null),
+      imageId: z.uuid().nullable().default(null),
+    })
+    .refine((v) => fitsKind(v.kind, v.label)),
   z.object({
     type: z.literal("token.update"),
     tokenId: z.uuid(),
@@ -140,6 +154,10 @@ export const tableCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("roll.request"), notation: z.string().trim().min(1).max(60), reserved: z.boolean().default(false) }),
   z.object({ type: z.literal("scene.open"), sceneId: z.uuid() }),
   z.object({ type: z.literal("scene.travel"), toSceneId: z.uuid() }),
+  /** Shows where one is pointing to the others; `null` when the pointer is put away. Never saved. */
+  z.object({ type: z.literal("pointer"), x: scenePixel.nullable(), y: scenePixel.nullable() }),
+  /** The DM brings everyone's view to this point of the scene, at this zoom. */
+  z.object({ type: z.literal("view.sync"), x: scenePixel, y: scenePixel, zoom: z.number().min(0.05).max(10) }),
   z.object({ type: z.literal("ping") }),
 ]);
 export type TableCommand = z.infer<typeof tableCommandSchema>;
@@ -160,6 +178,9 @@ export const tableEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("token.removed"), tokenId: z.string() }),
   z.object({ type: z.literal("message"), message: messageViewSchema }),
   z.object({ type: z.literal("presence"), present: z.array(presenceSchema) }),
+  /** Where someone is pointing; `x` and `y` are null when they put the pointer away. */
+  z.object({ type: z.literal("pointer"), accountId: z.string(), username: z.string(), x: scenePixel.nullable(), y: scenePixel.nullable() }),
+  z.object({ type: z.literal("view.sync"), x: scenePixel, y: scenePixel, zoom: z.number() }),
   z.object({ type: z.literal("error"), error: z.string() }),
   z.object({ type: z.literal("pong") }),
 ]);

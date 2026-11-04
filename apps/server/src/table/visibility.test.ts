@@ -6,7 +6,7 @@ const dm: Viewer = { accountId: "dm", username: "DM", role: "dm" };
 const anna: Viewer = { accountId: "anna", username: "Anna", role: "player" };
 const bruno: Viewer = { accountId: "bruno", username: "Bruno", role: "player" };
 
-const token = (id: string, hidden: boolean): TokenView => ({ id, sceneId: "s", label: id, color: "gold", imageId: null, x: 0, y: 0, size: 1, hidden, travels: false, ownerAccountId: null });
+const token = (id: string, hidden: boolean): TokenView => ({ id, sceneId: "s", kind: "token", label: id, color: "gold", imageId: null, x: 0, y: 0, size: 1, hidden, travels: false, ownerAccountId: null });
 const message = (over: Partial<MessageView>): MessageView => ({ id: "m", kind: "chat", audience: "all", authorId: "anna", authorName: "Anna", recipientId: null, recipientName: null, text: "ciao", notation: null, roll: null, createdAt: "2026-01-01T00:00:00.000Z", ...over });
 
 describe("tokens", () => {

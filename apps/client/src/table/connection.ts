@@ -25,6 +25,8 @@ export const END_CODE = 4000;
 const NOT_FOUND_CODE = 4404;
 /** The login behind the connection is over: reconnecting with the same cookie would only be refused. */
 export const SIGNED_OUT_CODE = 4001;
+/** The person opened too many connections to this table and this was the oldest: it is closed, and it stays closed. */
+export const REPLACED_CODE = 4003;
 export const PING_MS = 25_000;
 export const BACKOFF_MS = [1000, 2000, 4000, 8000];
 export const MAX_ATTEMPTS = 8;
@@ -80,7 +82,7 @@ export function connectTable(url: string, handlers: ConnectionHandlers, deps: Co
       if (ping !== null) deps.clearTimer(ping);
       ping = null;
       if (stopped) return;
-      if (e.code === END_CODE || e.code === NOT_FOUND_CODE || e.code === SIGNED_OUT_CODE || attempts >= MAX_ATTEMPTS) {
+      if (e.code === END_CODE || e.code === NOT_FOUND_CODE || e.code === SIGNED_OUT_CODE || e.code === REPLACED_CODE || attempts >= MAX_ATTEMPTS) {
         stop();
         handlers.onStatus("ended");
         return;

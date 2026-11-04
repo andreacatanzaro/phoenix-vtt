@@ -2,7 +2,7 @@ import type { MessageView, TableEvent, TokenView } from "@phoenix/shared";
 import { describe, expect, it } from "vitest";
 import { initialState, MAX_MESSAGES, reduce, type TableState } from "./state";
 
-const token = (id: string, over: Partial<TokenView> = {}): TokenView => ({ id, sceneId: "s1", label: id, color: "gold", imageId: null, x: 0, y: 0, size: 1, hidden: false, travels: false, ownerAccountId: null, ...over });
+const token = (id: string, over: Partial<TokenView> = {}): TokenView => ({ id, sceneId: "s1", kind: "token", label: id, color: "gold", imageId: null, x: 0, y: 0, size: 1, hidden: false, travels: false, ownerAccountId: null, ...over });
 const message = (id: string): MessageView => ({ id, kind: "chat", audience: "all", authorId: "a", authorName: "A", recipientId: null, recipientName: null, text: id, notation: null, roll: null, createdAt: "2026-01-01T00:00:00.000Z" });
 const scene = { id: "s1", name: "Sala", mapImageId: null, mapWidth: null, mapHeight: null, gridPx: 70, gridOffsetX: 0, gridOffsetY: 0, start: { x: 0, y: 0, w: 4, h: 4 } };
 const snapshot = (over: Partial<Extract<TableEvent, { type: "snapshot" }>> = {}): TableEvent => ({
@@ -15,7 +15,7 @@ const snapshot = (over: Partial<Extract<TableEvent, { type: "snapshot" }>> = {})
   present: [{ accountId: "me", username: "Io" }],
   ...over,
 });
-const apply = (state: TableState, event: TableEvent): TableState => reduce(state, { type: "event", event });
+const apply = (state: TableState, event: TableEvent, at = 1000): TableState => reduce(state, { type: "event", event, at });
 
 describe("table state", () => {
   it("a snapshot replaces everything and makes the table live", () => {
@@ -72,6 +72,30 @@ describe("table state", () => {
     const s = apply(initialState, snapshot());
     const r = reduce(s, { type: "refresh" });
     expect(r).toEqual({ ...s, revision: s.revision + 1 });
+  });
+
+  it("remembers where the others point, replaces it, and forgets it when it is put away", () => {
+    let s = apply(initialState, snapshot());
+    s = apply(s, { type: "pointer", accountId: "b", username: "Bruno", x: 10, y: 20 }, 5000);
+    s = apply(s, { type: "pointer", accountId: "b", username: "Bruno", x: 30, y: 40 }, 6000);
+    expect([...s.pointers.values()]).toEqual([{ accountId: "b", username: "Bruno", x: 30, y: 40, at: 6000 }]);
+    s = apply(s, { type: "pointer", accountId: "b", username: "Bruno", x: null, y: null });
+    expect(s.pointers.size).toBe(0);
+  });
+
+  it("a new snapshot (another scene) clears the pointers", () => {
+    let s = apply(initialState, snapshot());
+    s = apply(s, { type: "pointer", accountId: "b", username: "Bruno", x: 1, y: 1 });
+    expect(apply(s, snapshot()).pointers.size).toBe(0);
+  });
+
+  it("a request from the DM to look somewhere is new every time, even for the same place", () => {
+    let s = apply(initialState, snapshot());
+    expect(s.viewRequest).toBeNull();
+    s = apply(s, { type: "view.sync", x: 700, y: 450, zoom: 1.5 });
+    expect(s.viewRequest).toEqual({ x: 700, y: 450, zoom: 1.5, seq: 1 });
+    s = apply(s, { type: "view.sync", x: 700, y: 450, zoom: 1.5 });
+    expect(s.viewRequest?.seq).toBe(2);
   });
 
   it("follows the state of the connection", () => {

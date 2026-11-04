@@ -50,7 +50,7 @@ function color(value: string): TokenColor {
 }
 
 export function tokenView(row: TokenRow): TokenView {
-  return { id: row.id, sceneId: row.sceneId, label: row.label, color: color(row.color), imageId: row.imageId, x: row.x, y: row.y, size: row.size, hidden: row.hidden, travels: row.travels, ownerAccountId: row.ownerAccountId };
+  return { id: row.id, sceneId: row.sceneId, kind: row.kind === "text" ? "text" : "token", label: row.label, color: color(row.color), imageId: row.imageId, x: row.x, y: row.y, size: row.size, hidden: row.hidden, travels: row.travels, ownerAccountId: row.ownerAccountId };
 }
 
 export async function loadTokens(db: Database, sceneId: string): Promise<TokenView[]> {

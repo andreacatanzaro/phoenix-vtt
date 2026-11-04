@@ -13,6 +13,7 @@ import { createElement, deleteElement, loadTree, updateElement, type DeleteResul
 const elementParams = z.object({ worldId: z.string(), collection: collectionSchema, id: z.uuid() });
 const collectionParams = z.object({ worldId: z.string(), collection: collectionSchema });
 const linkParams = z.object({ worldId: z.string(), linkId: z.uuid() });
+const withTokensQuery = z.object({ withTokens: z.enum(["true", "false"]).optional() });
 
 function linkView(row: { id: string; fromSceneId: string; toSceneId: string; label: string }): SceneLinkView {
   return { id: row.id, fromSceneId: row.fromSceneId, toSceneId: row.toSceneId, label: row.label };
@@ -58,11 +59,14 @@ export function worldStructureRoutes(app: FastifyInstance, db: Database, hub: Ta
     if (access === null) return reply;
     // A scene is checked and deleted after every table command already waiting, so a token cannot arrive in between.
     const running = params.data.collection === "scenes" ? await runningSession(db, access.worldId) : null;
-    const remove = (): Promise<DeleteResult> => deleteElement(db, access.worldId, params.data.collection, params.data.id);
+    // A scene that still has tokens is deleted only when the request asks for it (`?withTokens=true`), after the DM confirmed.
+    const withTokens = withTokensQuery.safeParse(request.query).data?.withTokens === "true";
+    const remove = (): Promise<DeleteResult> => deleteElement(db, access.worldId, params.data.collection, params.data.id, withTokens);
     const result = running === null ? await remove() : await hub.serial(running.id, remove);
     if (result === "not-found") return fail(reply, 404, "not-found");
     if (result === "not-empty") return fail(reply, 409, "world.not-empty");
     if (result === "in-use") return fail(reply, 409, "world.scene-in-use");
+    if (result === "has-tokens") return fail(reply, 409, "world.scene-has-tokens");
     // The map of the scene that is gone is no longer used by anything.
     await reclaim();
     return reply.code(204).send();

@@ -11,7 +11,7 @@ export const people = [
 
 export const scene: TableScene = { id: "s1", name: "Sala comune", mapImageId: null, mapWidth: null, mapHeight: null, gridPx: 70, gridOffsetX: 0, gridOffsetY: 0, start: { x: 2, y: 2, w: 3, h: 2 } };
 
-export const token = (id: string, over: Partial<TokenView> = {}): TokenView => ({ id, sceneId: "s1", label: id, color: "gold", imageId: null, x: 0, y: 0, size: 1, hidden: false, travels: false, ownerAccountId: null, ...over });
+export const token = (id: string, over: Partial<TokenView> = {}): TokenView => ({ id, sceneId: "s1", kind: "token", label: id, color: "gold", imageId: null, x: 0, y: 0, size: 1, hidden: false, travels: false, ownerAccountId: null, ...over });
 
 export const message = (id: string, over: Partial<MessageView> = {}): MessageView => ({
   id,

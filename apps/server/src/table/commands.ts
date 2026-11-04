@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { rollDice, type Rng } from "@phoenix/rules-core";
-import { placeInZone, squaresOf, t, type MessageView, type TableCommand, type TableEvent, type TokenView } from "@phoenix/shared";
+import { placeInZone, squaresOf, t, TEXT_MAX_LENGTH, TOKEN_LABEL_MAX_LENGTH, type MessageView, type TableCommand, type TableEvent, type TokenView } from "@phoenix/shared";
 import { roleIn } from "../access";
 import { gameSessions, images, sceneLinks, tokens } from "../db/schema";
 import type { Database } from "../db/types";
@@ -120,7 +120,15 @@ async function run(deps: TableDeps, sessionId: string, asked: Viewer, command: T
 
   switch (command.type) {
     case "ping":
+    case "pointer":
+      // The pointer is relayed as it arrives, without waiting in line (see the table route): nothing to do here.
       return;
+
+    case "view.sync": {
+      requireDm(viewer);
+      deps.hub.broadcast(session.id, (to) => (to.accountId === viewer.accountId ? null : { type: "view.sync", x: command.x, y: command.y, zoom: command.zoom }));
+      return;
+    }
 
     case "chat.send": {
       let recipientId: string | null = null;
@@ -170,11 +178,14 @@ async function run(deps: TableDeps, sessionId: string, asked: Viewer, command: T
     case "token.add": {
       requireDm(viewer);
       if (session.currentSceneId === null) return refuse("table.no-scene");
-      await checkOwner(deps, session.worldId, command.ownerAccountId);
-      await checkTokenImage(deps, session.worldId, command.imageId);
+      // Owner and picture only mean something for a token; for a text they are ignored, so they are not checked either.
+      if (command.kind === "token") {
+        await checkOwner(deps, session.worldId, command.ownerAccountId);
+        await checkTokenImage(deps, session.worldId, command.imageId);
+      }
       const [row] = await db
         .insert(tokens)
-        .values({ worldId: session.worldId, sceneId: session.currentSceneId, label: command.label, color: command.color, imageId: command.imageId, x: command.x, y: command.y, size: command.size, hidden: command.hidden, travels: command.travels || command.ownerAccountId !== null, ownerAccountId: command.ownerAccountId, createdAt: deps.now() })
+        .values({ worldId: session.worldId, sceneId: session.currentSceneId, kind: command.kind, label: command.label, color: command.color, imageId: command.kind === "text" ? null : command.imageId, x: command.x, y: command.y, size: command.kind === "text" ? 1 : command.size, hidden: command.hidden, travels: command.kind === "text" ? false : command.travels || command.ownerAccountId !== null, ownerAccountId: command.kind === "text" ? null : command.ownerAccountId, createdAt: deps.now() })
         .returning();
       if (row !== undefined) broadcastToken(deps, session.id, tokenView(row), true);
       return;
@@ -185,6 +196,10 @@ async function run(deps: TableDeps, sessionId: string, asked: Viewer, command: T
       const row = await tokenHere(deps, session, command.tokenId);
       if (command.ownerAccountId !== undefined) await checkOwner(deps, session.worldId, command.ownerAccountId);
       if (command.imageId !== undefined) await checkTokenImage(deps, session.worldId, command.imageId);
+      // A name is short and a text may be long: the limit is the one of what this is.
+      if (command.label !== undefined && command.label.length > (row.kind === "text" ? TEXT_MAX_LENGTH : TOKEN_LABEL_MAX_LENGTH)) return refuse("invalid");
+      // A text is words on the map: it has no owner, no picture and does not travel with the group.
+      if (row.kind === "text" && (command.ownerAccountId !== undefined || command.travels === true || command.imageId !== undefined)) return refuse("invalid");
       const changes = {
         ...(command.label === undefined ? {} : { label: command.label }),
         ...(command.color === undefined ? {} : { color: command.color }),
@@ -230,7 +245,8 @@ async function run(deps: TableDeps, sessionId: string, asked: Viewer, command: T
       await db.transaction(async (tx) => {
         const arriving = await tx.select().from(tokens).where(eq(tokens.sceneId, destination.id));
         const travelling = (await tx.select().from(tokens).where(and(eq(tokens.sceneId, from), eq(tokens.travels, true)))).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
-        const occupied = new Set(arriving.flatMap(squaresOf));
+        // Texts take no square of their own, so they do not keep a token out of a place.
+        const occupied = new Set(arriving.filter((r) => r.kind !== "text").flatMap(squaresOf));
         const placed = placeInZone(destination.start, travelling.map((r) => ({ id: r.id, size: r.size })), occupied);
         for (const spot of placed) await tx.update(tokens).set({ sceneId: destination.id, x: spot.x, y: spot.y }).where(eq(tokens.id, spot.id));
         await tx.update(gameSessions).set({ currentSceneId: destination.id }).where(eq(gameSessions.id, session.id));

@@ -10,6 +10,12 @@ export const MAX_ZOOM = 6;
 export const EMPTY_BOARD_CELLS = { w: 30, h: 20 };
 export const MAX_CELL = 1000;
 
+/** Whether two places (or two absent places) are the same spot, so a report that did not change can be left unsaid. */
+export function samePoint(a: Point | null, b: Point | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.x === b.x && a.y === b.y;
+}
+
 export function toScreen(view: View, p: Point): Point {
   return { x: p.x * view.zoom + view.panX, y: p.y * view.zoom + view.panY };
 }
@@ -34,9 +40,63 @@ export function clampCell(cell: Point): Point {
   return { x: clamp(cell.x), y: clamp(cell.y) };
 }
 
-/** Where a token sits in the scene, in pixels. */
-export function tokenRect(scene: Pick<TableScene, "gridPx" | "gridOffsetX" | "gridOffsetY">, token: Pick<TokenView, "x" | "y" | "size">): { x: number; y: number; w: number; h: number } {
-  return { x: scene.gridOffsetX + token.x * scene.gridPx, y: scene.gridOffsetY + token.y * scene.gridPx, w: token.size * scene.gridPx, h: token.size * scene.gridPx };
+/** Characters of a text that fit in one square, at the size the board writes them. */
+export const TEXT_CHARS_PER_CELL = 6;
+export const TEXT_MAX_CELLS_WIDE = 12;
+/** How many lines of text fit in one square. */
+export const TEXT_LINES_PER_CELL = 2.5;
+
+/** The squares a text covers, from how long it is: wide first, then taller. */
+export function textCells(label: string): { w: number; h: number } {
+  const w = Math.min(TEXT_MAX_CELLS_WIDE, Math.max(1, Math.ceil(label.length / TEXT_CHARS_PER_CELL)));
+  const lines = Math.ceil(label.length / (w * TEXT_CHARS_PER_CELL));
+  return { w, h: Math.max(1, Math.ceil(lines / TEXT_LINES_PER_CELL)) };
+}
+
+/** Where a token sits in the scene, in pixels. A text is as wide as it needs to be; a figure is square. */
+export function tokenRect(
+  scene: Pick<TableScene, "gridPx" | "gridOffsetX" | "gridOffsetY">,
+  token: Pick<TokenView, "x" | "y" | "size"> & { kind?: TokenView["kind"]; label?: string },
+): { x: number; y: number; w: number; h: number } {
+  const cells = token.kind === "text" ? textCells(token.label ?? "") : { w: token.size, h: token.size };
+  return { x: scene.gridOffsetX + token.x * scene.gridPx, y: scene.gridOffsetY + token.y * scene.gridPx, w: cells.w * scene.gridPx, h: cells.h * scene.gridPx };
+}
+
+/**
+ * The view after the screen changed size (the window resized, the device turned): the same point stays in the middle and
+ * the zoom stays, so the person does not lose the place they chose.
+ */
+export function keepCenterOnResize(view: View, before: { w: number; h: number }, after: { w: number; h: number }): View {
+  return viewFor(viewCenter(view, before), view.zoom, after);
+}
+
+/** Where a copy of something at (x, y) goes: one square down and right, or up and left when that would leave the board. */
+export function duplicateSpot(x: number, y: number): Point {
+  return { x: x + 1 > MAX_CELL ? x - 1 : x + 1, y: y + 1 > MAX_CELL ? y - 1 : y + 1 };
+}
+
+/**
+ * Where a group of tokens lands when it is let go after being dragged by `delta` (scene pixels): every token moves by
+ * the same whole number of squares, and only the ones whose square changed are listed.
+ */
+export function groupDrop(scene: Pick<TableScene, "gridPx">, tokens: readonly Pick<TokenView, "id" | "x" | "y">[], delta: Point): { id: string; x: number; y: number }[] {
+  const dx = Math.round(delta.x / scene.gridPx);
+  const dy = Math.round(delta.y / scene.gridPx);
+  return tokens.flatMap((t) => {
+    const target = clampCell({ x: t.x + dx, y: t.y + dy });
+    return target.x === t.x && target.y === t.y ? [] : [{ id: t.id, x: target.x, y: target.y }];
+  });
+}
+
+/** The point of the scene at the middle of a screen, for the readout of the view and for syncing it. */
+export function viewCenter(view: View, screen: { w: number; h: number }): Point {
+  return toScene(view, { x: screen.w / 2, y: screen.h / 2 });
+}
+
+/** The view that has `center` (a point of the scene) in the middle of the screen at this zoom. */
+export function viewFor(center: Point, zoom: number, screen: { w: number; h: number }): View {
+  const z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+  return { zoom: z, panX: screen.w / 2 - center.x * z, panY: screen.h / 2 - center.y * z };
 }
 
 /** The token on top at a point of the scene (the last one drawn), if any. */

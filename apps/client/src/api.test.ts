@@ -60,3 +60,17 @@ describe("errorText", () => {
     expect(errorText(new Error("boom"))).toBe("Il servizio non è disponibile.");
   });
 });
+
+describe("deleting an element", () => {
+  it("asks for the tokens to go with a scene only when told to", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn((path: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${path}`);
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }));
+    await api.deleteElement("w1", "scenes", "s1");
+    await api.deleteElement("w1", "scenes", "s1", { withTokens: false });
+    await api.deleteElement("w1", "scenes", "s1", { withTokens: true });
+    expect(calls).toEqual(["DELETE /api/worlds/w1/scenes/s1", "DELETE /api/worlds/w1/scenes/s1", "DELETE /api/worlds/w1/scenes/s1?withTokens=true"]);
+  });
+});

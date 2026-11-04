@@ -118,6 +118,14 @@ describe("setting a scene for the table", () => {
     expect(field(await c.get(url, w.dm), "scene", "mapWidth")).toBe(1400);
   });
 
+  it("keeps a grid with decimals, as the alignment of a map gives", async () => {
+    const w = await world("decimals");
+    const url = `${w.base}/scenes/${w.scene}/table`;
+    const done = await c.patch(url, { gridPx: 50.5, gridOffsetX: 12.25, gridOffsetY: 0.5 }, w.dm);
+    expect(field(done, "scene")).toMatchObject({ gridPx: 50.5, gridOffsetX: 12.25, gridOffsetY: 0.5 });
+    expect(field(await c.get(url, w.dm), "scene")).toMatchObject({ gridPx: 50.5, gridOffsetX: 12.25, gridOffsetY: 0.5 });
+  });
+
   it("a partial change keeps the rest, and the map can be taken away", async () => {
     const w = await world("partial");
     const url = `${w.base}/scenes/${w.scene}/table`;
@@ -138,7 +146,7 @@ describe("setting a scene for the table", () => {
       expect(r.statusCode).toBe(400);
       expect(field(r, "error")).toBe("errors.image.map-invalid");
     }
-    for (const body of [{}, { gridPx: 5 }, { gridPx: 401 }, { gridPx: 50.5 }, { start: { x: 0, y: 0, w: 0, h: 4 } }, { start: { x: 0, y: 0, w: 65, h: 4 } }, { start: { x: 501, y: 0, w: 4, h: 4 } }, { start: { x: 0, y: -501, w: 4, h: 4 } }, { gridOffsetX: 5000 }]) {
+    for (const body of [{}, { gridPx: 5 }, { gridPx: 401 }, { gridPx: Number.NaN }, { start: { x: 0, y: 0, w: 0, h: 4 } }, { start: { x: 0, y: 0, w: 65, h: 4 } }, { start: { x: 501, y: 0, w: 4, h: 4 } }, { start: { x: 0, y: -501, w: 4, h: 4 } }, { gridOffsetX: 5000 }]) {
       expect((await c.patch(url, body, w.dm)).statusCode, JSON.stringify(body)).toBe(400);
     }
   });

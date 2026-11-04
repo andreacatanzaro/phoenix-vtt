@@ -109,8 +109,9 @@ export const api = {
   async updateElement(worldId: string, collection: ElementCollection, id: string, patch: UpdateElementInput): Promise<ElementView> {
     return (await call("PATCH", `${world(worldId)}/${collection}/${encodeURIComponent(id)}`, elementResponseSchema, patch)).element;
   },
-  async deleteElement(worldId: string, collection: ElementCollection, id: string): Promise<void> {
-    await call("DELETE", `${world(worldId)}/${collection}/${encodeURIComponent(id)}`, null);
+  /** `withTokens` is the DM's confirmation that a scene still holding tokens may go, with them. */
+  async deleteElement(worldId: string, collection: ElementCollection, id: string, options: { withTokens?: boolean } = {}): Promise<void> {
+    await call("DELETE", `${world(worldId)}/${collection}/${encodeURIComponent(id)}${options.withTokens === true ? "?withTokens=true" : ""}`, null);
   },
   async sceneLinks(worldId: string): Promise<SceneLinkView[]> {
     return (await call("GET", `${world(worldId)}/scene-links`, sceneLinksResponseSchema)).links;

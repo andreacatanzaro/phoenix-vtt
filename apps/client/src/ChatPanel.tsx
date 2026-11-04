@@ -63,7 +63,7 @@ export function ChatPanel({ messages, me, people, send }: Props) {
   };
 
   return (
-    <section className="panel chat" aria-label={t("ui.world.table.chat.title")}>
+    <section className="panel hud-panel chat" aria-label={t("ui.world.table.chat.title")}>
       <h2 className="section-title">{t("ui.world.table.chat.title")}</h2>
       <ol className="log" role="log" aria-live="polite" aria-label={t("ui.world.table.chat.log")}>
         {messages.length === 0 && <li className="muted small">{t("ui.world.table.chat.empty")}</li>}

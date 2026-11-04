@@ -91,12 +91,13 @@ export async function updateElement(db: Database, worldId: string, collection: E
   return updated === undefined ? null : view(updated, true);
 }
 
-export type DeleteResult = "deleted" | "not-found" | "not-empty" | "in-use";
+/** "has-tokens": a scene with tokens on it, which is deleted only when the request says its tokens may go with it. */
+export type DeleteResult = "deleted" | "not-found" | "not-empty" | "in-use" | "has-tokens";
 
 /** Deletes an element only if it holds nothing; the links of a deleted scene go with it. */
-export async function deleteElement(db: Database, worldId: string, collection: ElementCollection, id: string): Promise<DeleteResult> {
+export async function deleteElement(db: Database, worldId: string, collection: ElementCollection, id: string, withTokens = false): Promise<DeleteResult> {
   try {
-    return await deleteChecked(db, worldId, collection, id);
+    return await deleteChecked(db, worldId, collection, id, withTokens);
   } catch (error) {
     // A child was added between the check and the delete: the database refuses, and the element is not empty after all.
     if (isForeignKeyViolation(error)) return "not-empty";
@@ -104,7 +105,7 @@ export async function deleteElement(db: Database, worldId: string, collection: E
   }
 }
 
-async function deleteChecked(db: Database, worldId: string, collection: ElementCollection, id: string): Promise<DeleteResult> {
+async function deleteChecked(db: Database, worldId: string, collection: ElementCollection, id: string, withTokens: boolean): Promise<DeleteResult> {
   const count = async (query: Promise<{ n: number }[]>): Promise<number> => (await query)[0]?.n ?? 0;
   switch (collection) {
     case "regions": {
@@ -120,8 +121,9 @@ async function deleteChecked(db: Database, worldId: string, collection: ElementC
       return (await db.delete(places).where(and(eq(places.id, id), eq(places.worldId, worldId))).returning({ id: places.id })).length > 0 ? "deleted" : "not-found";
     }
     case "scenes": {
-      // A scene with tokens on it is not empty, and the scene being played cannot be taken away from under the table.
-      if (await count(db.select({ n: sql<number>`count(*)::int` }).from(tokens).where(eq(tokens.sceneId, id)))) return "not-empty";
+      // A scene with tokens goes only if the request says so (its tokens go with it), and the scene being played cannot be
+      // taken away from under the table, whatever the request says.
+      if (!withTokens && (await count(db.select({ n: sql<number>`count(*)::int` }).from(tokens).where(eq(tokens.sceneId, id))))) return "has-tokens";
       if (await count(db.select({ n: sql<number>`count(*)::int` }).from(gameSessions).where(and(eq(gameSessions.currentSceneId, id), eq(gameSessions.status, "running"))))) return "in-use";
       return (await db.delete(scenes).where(and(eq(scenes.id, id), eq(scenes.worldId, worldId))).returning({ id: scenes.id })).length > 0 ? "deleted" : "not-found";
     }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, jsonb, foreignKey, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, doublePrecision, jsonb, foreignKey, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 export const worldRole = pgEnum("world_role", ["dm", "player"]);
 
@@ -111,9 +111,9 @@ export const scenes = pgTable(
     placeId: uuid("place_id").notNull(),
     /** The map picture, the size of one grid square in picture pixels, and where the grid starts. */
     mapImageId: uuid("map_image_id").references(() => images.id, { onDelete: "set null" }),
-    gridPx: integer("grid_px").notNull().default(70),
-    gridOffsetX: integer("grid_offset_x").notNull().default(0),
-    gridOffsetY: integer("grid_offset_y").notNull().default(0),
+    gridPx: doublePrecision("grid_px").notNull().default(70),
+    gridOffsetX: doublePrecision("grid_offset_x").notNull().default(0),
+    gridOffsetY: doublePrecision("grid_offset_y").notNull().default(0),
     /** Where tokens that travel arrive, in grid squares: a rectangle the DM places on the map. */
     startX: integer("start_x").notNull().default(0),
     startY: integer("start_y").notNull().default(0),
@@ -186,6 +186,8 @@ export const tokens = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     worldId: worldRef(),
     sceneId: uuid("scene_id").notNull(),
+    /** A figure on the board ("token") or a line of text written on the map ("text"). */
+    kind: text("kind").notNull().default("token"),
     label: text("label").notNull(),
     color: text("color").notNull().default("gold"),
     imageId: uuid("image_id").references(() => images.id, { onDelete: "set null" }),
@@ -202,6 +204,7 @@ export const tokens = pgTable(
     foreignKey({ columns: [t.sceneId, t.worldId], foreignColumns: [scenes.id, scenes.worldId], name: "tokens_scene_fk" }).onDelete("cascade"),
     index("tokens_scene_idx").on(t.sceneId),
     check("tokens_size", sql`${t.size} between 1 and 8`),
+    check("tokens_kind", sql`${t.kind} in ('token', 'text')`),
     check("tokens_position", sql`${t.x} between -1000 and 1000 and ${t.y} between -1000 and 1000`),
   ],
 );

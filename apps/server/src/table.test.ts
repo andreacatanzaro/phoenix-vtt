@@ -1,7 +1,7 @@
 import { createScriptedRng } from "@phoenix/rules-core";
 import type { TableEvent } from "@phoenix/shared";
 import { eq } from "drizzle-orm";
-import { tableMessages } from "./db/schema";
+import { tableMessages, tokens } from "./db/schema";
 import { insertMessage, recentMessages, SNAPSHOT_MESSAGES } from "./table/store";
 import { canSeeMessage } from "./table/visibility";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -290,6 +290,256 @@ describe("scenes and tokens", () => {
     const ok = await dm.client.waitFor(tokenEvent("Volto"));
     expect(ok.type === "token.upserted" && ok.token.imageId).toBe(face);
     closeAll();
+  });
+});
+
+describe("text on the map", () => {
+  async function opened(prefix: string) {
+    const w = await table(prefix);
+    const dm = await sit(w, w.dm);
+    const anna = await sit(w, w.anna);
+    dm.client.send({ type: "scene.open", sceneId: w.s1 });
+    await anna.client.waitFor((e) => isSnapshot(e) && e.scene !== null);
+    return { w, dm, anna, closeAll: () => { dm.client.close(); anna.client.close(); } };
+  }
+
+  it("the DM writes a text on the map and everyone sees it, longer than a token's name may be", async () => {
+    const { dm, anna, closeAll } = await opened("text");
+    const long = "La botola è sotto il tappeto, ma la serratura è arrugginita e va forzata con cautela, e non da soli. ".repeat(1);
+    dm.client.send({ type: "token.add", kind: "text", label: long, x: 3, y: 2 });
+    const seen = await anna.client.waitFor((e) => e.type === "token.upserted" && e.token.kind === "text");
+    expect(seen.type === "token.upserted" && seen.token).toMatchObject({ kind: "text", label: long.trim(), x: 3, y: 2, size: 1 });
+    closeAll();
+  });
+
+  it("a name is limited to 40 characters, a text to 200, and nothing longer is accepted", async () => {
+    const { dm, closeAll } = await opened("textlimit");
+    dm.client.send({ type: "token.add", label: "n".repeat(41), x: 0, y: 0 });
+    expect(await dm.client.waitFor(errorEvent)).toMatchObject({ error: "errors.invalid" });
+    const mark = dm.client.mark();
+    dm.client.send({ type: "token.add", kind: "text", label: "t".repeat(201), x: 0, y: 0 });
+    expect(await dm.client.waitFor(errorEvent, mark)).toMatchObject({ error: "errors.invalid" });
+    const mark2 = dm.client.mark();
+    dm.client.send({ type: "token.add", kind: "text", label: "t".repeat(200), x: 0, y: 0 });
+    expect((await dm.client.waitFor(tokenEvent("t".repeat(200)), mark2)).type).toBe("token.upserted");
+    closeAll();
+  });
+
+  it("renaming keeps to the limit of what it is", async () => {
+    const { dm, closeAll } = await opened("textrename");
+    dm.client.send({ type: "token.add", label: "Goblin", x: 0, y: 0 });
+    dm.client.send({ type: "token.add", kind: "text", label: "Nota", x: 1, y: 1 });
+    const token = await dm.client.waitFor(tokenEvent("Goblin"));
+    const note = await dm.client.waitFor(tokenEvent("Nota"));
+    const tokenId = token.type === "token.upserted" ? token.token.id : "";
+    const noteId = note.type === "token.upserted" ? note.token.id : "";
+    const mark = dm.client.mark();
+    dm.client.send({ type: "token.update", tokenId, label: "g".repeat(100) });
+    expect(await dm.client.waitFor(errorEvent, mark)).toMatchObject({ error: "errors.invalid" });
+    const mark2 = dm.client.mark();
+    dm.client.send({ type: "token.update", tokenId: noteId, label: "g".repeat(100) });
+    expect((await dm.client.waitFor((e) => e.type === "token.upserted" && e.token.id === noteId && e.token.label.length === 100, mark2)).type).toBe("token.upserted");
+    closeAll();
+  });
+
+  it("a hidden text is hidden from players like any token, and a player cannot write one", async () => {
+    const { dm, anna, closeAll } = await opened("texthidden");
+    dm.client.send({ type: "token.add", kind: "text", label: "Segreto", x: 0, y: 0, hidden: true });
+    await dm.client.waitFor(tokenEvent("Segreto"));
+    anna.client.send({ type: "token.add", kind: "text", label: "Graffito", x: 0, y: 0 });
+    expect(await anna.client.waitFor(errorEvent)).toMatchObject({ error: "errors.forbidden" });
+    expect(anna.client.events.some((e) => JSON.stringify(e).includes("Segreto"))).toBe(false);
+    closeAll();
+  });
+
+  it("a text is kept: someone who comes in later gets it with its kind", async () => {
+    const { w, dm, closeAll } = await opened("textkept");
+    dm.client.send({ type: "token.add", kind: "text", label: "Qui c'è un trabocchetto", x: 4, y: 4 });
+    await dm.client.waitFor(tokenEvent("Qui c'è un trabocchetto"));
+    const late = await sit(w, w.bruno);
+    expect(late.snapshot.tokens.map((x) => `${x.kind}:${x.label}`)).toEqual(["text:Qui c'è un trabocchetto"]);
+    late.client.close();
+    closeAll();
+  });
+});
+
+describe("pointer and shared view", () => {
+  async function seated(prefix: string) {
+    const w = await table(prefix);
+    const dm = await sit(w, w.dm);
+    const anna = await sit(w, w.anna);
+    const bruno = await sit(w, w.bruno);
+    return { w, dm, anna, bruno, closeAll: () => { dm.client.close(); anna.client.close(); bruno.client.close(); } };
+  }
+  const pointerFrom = (name: string) => (e: TableEvent): boolean => e.type === "pointer" && e.username === name;
+
+  it("what one points at is shown to the others, with their name, and not to the one pointing", async () => {
+    const { dm, anna, bruno, closeAll } = await seated("pointer");
+    anna.client.send({ type: "pointer", x: 120.5, y: 80 });
+    const seen = await bruno.client.waitFor(pointerFrom("pointer-anna"));
+    expect(seen).toMatchObject({ type: "pointer", x: 120.5, y: 80 });
+    await dm.client.waitFor(pointerFrom("pointer-anna"));
+    dm.client.send({ type: "ping" });
+    await dm.client.waitFor((e) => e.type === "pong");
+    expect(anna.client.events.some((e) => e.type === "pointer")).toBe(false);
+    closeAll();
+  });
+
+  it("putting the pointer away is told too, and so is leaving the table", async () => {
+    const { anna, bruno, closeAll } = await seated("pointeroff");
+    anna.client.send({ type: "pointer", x: 1, y: 2 });
+    await bruno.client.waitFor(pointerFrom("pointeroff-anna"));
+    const mark = bruno.client.mark();
+    anna.client.send({ type: "pointer", x: null, y: null });
+    expect(await bruno.client.waitFor((e) => e.type === "pointer" && e.x === null, mark)).toMatchObject({ y: null });
+    anna.client.send({ type: "pointer", x: 3, y: 4 });
+    await bruno.client.waitFor((e) => e.type === "pointer" && e.x === 3, mark);
+    const mark2 = bruno.client.mark();
+    anna.client.close();
+    expect(await bruno.client.waitFor((e) => e.type === "pointer" && e.x === null, mark2)).toMatchObject({ username: "pointeroff-anna" });
+    closeAll();
+  });
+
+  it("a pointer is never saved or sent in a snapshot, and a bad position is refused", async () => {
+    const { w, anna, bruno, closeAll } = await seated("pointerbad");
+    anna.client.send({ type: "pointer", x: 5, y: 5 });
+    await bruno.client.waitFor(pointerFrom("pointerbad-anna"));
+    const late = await sit(w, w.dm);
+    expect(late.client.events.some((e) => e.type === "pointer")).toBe(false);
+    // Frames that are not a valid pointer go through the normal path and are refused there.
+    anna.client.send({ type: "pointer", x: 1e9, y: 0 });
+    expect(await anna.client.waitFor(errorEvent)).toMatchObject({ error: "errors.invalid" });
+    late.client.close();
+    closeAll();
+  });
+
+  it("the pointer has its own allowance, large enough for a moving mouse, and is dropped quietly beyond it", async () => {
+    const { anna, bruno, closeAll } = await seated("pointerflood");
+    for (let i = 0; i < 500; i++) anna.client.send({ type: "pointer", x: i, y: i });
+    anna.client.send({ type: "chat.send", text: "ancora connessa" });
+    await bruno.client.waitFor(messageWith("ancora connessa"));
+    const moves = bruno.client.events.filter((e) => e.type === "pointer").length;
+    expect(moves).toBeGreaterThan(40);
+    expect(moves).toBeLessThanOrEqual(400);
+    expect(anna.client.events.some(errorEvent)).toBe(false);
+    closeAll();
+  });
+
+  it("the DM brings everyone's view to a point; a player cannot", async () => {
+    const { dm, anna, bruno, closeAll } = await seated("viewsync");
+    dm.client.send({ type: "view.sync", x: 700, y: 450, zoom: 1.5 });
+    expect(await bruno.client.waitFor((e) => e.type === "view.sync")).toMatchObject({ x: 700, y: 450, zoom: 1.5 });
+    await anna.client.waitFor((e) => e.type === "view.sync");
+    const mark = bruno.client.mark();
+    bruno.client.send({ type: "view.sync", x: 0, y: 0, zoom: 1 });
+    expect(await bruno.client.waitFor(errorEvent, mark)).toMatchObject({ error: "errors.forbidden" });
+    expect(anna.client.events.filter((e) => e.type === "view.sync")).toHaveLength(1);
+    closeAll();
+  });
+});
+
+describe("the pointer and the login", () => {
+  it("a login that has expired cannot go on sending pointer positions, even without pings", async () => {
+    const w = await table("pointerexpire");
+    const anna = await sit(w, w.anna);
+    const bruno = await sit(w, w.bruno);
+    t.clock.now = new Date(t.clock.now.getTime() + 31 * 24 * 60 * 60 * 1000);
+    anna.client.send({ type: "pointer", x: 5, y: 5 });
+    expect(await anna.client.closed).toBe(4001);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(bruno.client.events.some((e) => e.type === "pointer")).toBe(false);
+    bruno.client.close();
+  });
+
+  it("the pointer allowance belongs to the person, not to each connection they open", async () => {
+    const w = await table("pointeraccount");
+    const first = await sit(w, w.anna);
+    const second = await sit(w, w.anna);
+    const watcher = await sit(w, w.bruno);
+    for (let i = 0; i < 300; i++) {
+      first.client.send({ type: "pointer", x: i, y: 0 });
+      second.client.send({ type: "pointer", x: i, y: 1 });
+    }
+    first.client.send({ type: "chat.send", text: "fine" });
+    await watcher.client.waitFor(messageWith("fine"));
+    await new Promise((r) => setTimeout(r, 200));
+    // 600 positions were sent: only the 400 of the allowance went through.
+    expect(watcher.client.events.filter((e) => e.type === "pointer").length).toBeLessThanOrEqual(400);
+    expect(watcher.client.events.filter((e) => e.type === "pointer").length).toBeGreaterThan(100);
+    for (const x of [first, second, watcher]) x.client.close();
+  });
+});
+
+describe("how many connections a person may hold", () => {
+  it("the oldest is closed, with the code that tells it was replaced, once there are too many", async () => {
+    const w = await table("sockets");
+    const dm = await sit(w, w.dm);
+    const mine: Awaited<ReturnType<typeof sit>>[] = [];
+    for (let i = 0; i < 5; i++) mine.push(await sit(w, w.anna));
+    expect(await mine[0]?.client.closed).toBe(4003);
+    // The others are still there and still work.
+    const last = mine[4];
+    last?.client.send({ type: "chat.send", text: "Sono ancora qui" });
+    await dm.client.waitFor(messageWith("Sono ancora qui"));
+    expect(t.hub.connections(w.sessionId, w.annaId)).toBe(4);
+    for (const x of [dm, ...mine.slice(1)]) x.client.close();
+  });
+
+  it("other people's connections are not touched", async () => {
+    const w = await table("socketsother");
+    const bruno = await sit(w, w.bruno);
+    for (let i = 0; i < 6; i++) await sit(w, w.anna);
+    expect(t.hub.connections(w.sessionId, w.brunoId)).toBe(1);
+    bruno.client.close();
+  });
+});
+
+describe("texts and the group", () => {
+  async function opened(prefix: string) {
+    const w = await table(prefix);
+    await c.patch(`${w.base}/scenes/${w.s2}/table`, { start: { x: 10, y: 10, w: 2, h: 2 } }, w.dm);
+    const dm = await sit(w, w.dm);
+    dm.client.send({ type: "scene.open", sceneId: w.s1 });
+    await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s1);
+    return { w, dm };
+  }
+
+  it("a text has no owner, no picture and does not travel, whatever was asked", async () => {
+    const { dm } = await opened("textplain");
+    dm.client.send({ type: "token.add", kind: "text", label: "Nota", x: 0, y: 0, travels: true, ownerAccountId: "00000000-0000-4000-8000-000000000000" });
+    const seen = await dm.client.waitFor(tokenEvent("Nota"));
+    expect(seen.type === "token.upserted" && seen.token).toMatchObject({ kind: "text", travels: false, ownerAccountId: null, imageId: null });
+    dm.client.close();
+  });
+
+  it("changing a text's owner, picture or whether it travels is refused", async () => {
+    const { w, dm } = await opened("textrefuse");
+    dm.client.send({ type: "token.add", kind: "text", label: "Nota", x: 0, y: 0 });
+    const seen = await dm.client.waitFor(tokenEvent("Nota"));
+    const tokenId = seen.type === "token.upserted" ? seen.token.id : "";
+    for (const change of [{ travels: true }, { ownerAccountId: w.annaId }]) {
+      const mark = dm.client.mark();
+      dm.client.send({ type: "token.update", tokenId, ...change });
+      expect(await dm.client.waitFor(errorEvent, mark)).toMatchObject({ error: "errors.invalid" });
+    }
+    dm.client.close();
+  });
+
+  it("a text lying in the start zone does not keep the party out of its squares", async () => {
+    const { w, dm } = await opened("textzone");
+    dm.client.send({ type: "scene.open", sceneId: w.s2 });
+    await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s2, dm.client.mark() - 1);
+    dm.client.send({ type: "token.add", kind: "text", label: "Qui si entra", x: 10, y: 10 });
+    await dm.client.waitFor(tokenEvent("Qui si entra"));
+    dm.client.send({ type: "scene.open", sceneId: w.s1 });
+    await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s1, dm.client.mark() - 1);
+    dm.client.send({ type: "token.add", label: "Eroe", x: 0, y: 0, travels: true });
+    await dm.client.waitFor(tokenEvent("Eroe"));
+    const mark = dm.client.mark();
+    dm.client.send({ type: "scene.travel", toSceneId: w.s2 });
+    const snap = await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s2, mark);
+    expect(isSnapshot(snap) && snap.tokens.find((x) => x.label === "Eroe")).toMatchObject({ x: 10, y: 10 });
+    dm.client.close();
   });
 });
 
@@ -648,11 +898,50 @@ describe("deleting scenes", () => {
     await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s2, dm.client.mark() - 1);
     const refused = await c.del(`${w.base}/scenes/${w.s1}`, w.dm);
     expect(refused.statusCode).toBe(409);
-    expect(field(refused, "error")).toBe("errors.world.not-empty");
+    expect(field(refused, "error")).toBe("errors.world.scene-has-tokens");
+    // An explicit "no" is the same as not asking.
+    expect((await c.del(`${w.base}/scenes/${w.s1}?withTokens=false`, w.dm)).statusCode).toBe(409);
     dm.client.send({ type: "scene.open", sceneId: w.s1 });
     const back = await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s1, dm.client.mark() - 1);
     expect(isSnapshot(back) && back.tokens.map((x) => x.label)).toEqual(["Goblin"]);
     dm.client.close();
+  });
+
+  it("deletes a scene with its tokens when the DM has confirmed it", async () => {
+    const w = await table("delconfirmed");
+    const dm = await sit(w, w.dm);
+    dm.client.send({ type: "scene.open", sceneId: w.s1 });
+    await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s1);
+    dm.client.send({ type: "token.add", label: "Goblin", x: 1, y: 1 });
+    dm.client.send({ type: "token.add", kind: "text", label: "Nota", x: 2, y: 2 });
+    await dm.client.waitFor(tokenEvent("Nota"));
+    dm.client.send({ type: "scene.open", sceneId: w.s2 });
+    await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s2, dm.client.mark() - 1);
+    const before = await t.db.select({ id: tokens.id }).from(tokens).where(eq(tokens.sceneId, w.s1));
+    expect(before).toHaveLength(2);
+    expect((await c.del(`${w.base}/scenes/${w.s1}?withTokens=true`, w.dm)).statusCode).toBe(204);
+    expect(await t.db.select({ id: tokens.id }).from(tokens).where(eq(tokens.sceneId, w.s1))).toEqual([]);
+    expect(field(await c.get(`${w.base}/tree`, w.dm), "regions", 0, "areas", 0, "places", 0, "scenes", 0, "id")).not.toBe(w.s1);
+    dm.client.close();
+  });
+
+  it("the confirmation does not let the scene being played go, tokens or not", async () => {
+    const w = await table("delconfirmedplaying");
+    const dm = await sit(w, w.dm);
+    dm.client.send({ type: "scene.open", sceneId: w.s1 });
+    await dm.client.waitFor((e) => isSnapshot(e) && e.scene?.id === w.s1);
+    dm.client.send({ type: "token.add", label: "Goblin", x: 1, y: 1 });
+    await dm.client.waitFor(tokenEvent("Goblin"));
+    const refused = await c.del(`${w.base}/scenes/${w.s1}?withTokens=true`, w.dm);
+    expect(refused.statusCode).toBe(409);
+    expect(field(refused, "error")).toBe("errors.world.scene-in-use");
+    expect(await t.db.select({ id: tokens.id }).from(tokens).where(eq(tokens.sceneId, w.s1))).toHaveLength(1);
+    dm.client.close();
+  });
+
+  it("a player cannot delete a scene, confirmed or not", async () => {
+    const w = await table("delplayer");
+    expect((await c.del(`${w.base}/scenes/${w.s3}?withTokens=true`, w.anna)).statusCode).toBe(403);
   });
 
   it("refuses the scene being played, even when it is empty", async () => {

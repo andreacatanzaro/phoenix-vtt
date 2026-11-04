@@ -85,6 +85,8 @@ describe("building the world", () => {
       expect(r.statusCode).toBe(409);
       expect(field(r, "error")).toBe("errors.world.not-empty");
     }
+    // The confirmation about tokens is for scenes only: it does not make a region, an area or a place go with what is in it.
+    expect((await c.del(`${w.base}/places/${w.place}?withTokens=true`, w.dm)).statusCode).toBe(409);
     expect((await c.del(`${w.base}/scenes/${w.scene}`, w.dm)).statusCode).toBe(204);
     expect((await c.del(`${w.base}/places/${w.place}`, w.dm)).statusCode).toBe(204);
     expect((await c.del(`${w.base}/areas/${w.area}`, w.dm)).statusCode).toBe(204);

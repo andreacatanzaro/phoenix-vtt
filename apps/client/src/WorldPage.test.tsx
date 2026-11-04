@@ -179,6 +179,58 @@ describe("the structure", () => {
   });
 });
 
+describe("deleting a scene that has tokens", () => {
+  const withoutSala = { regions: [{ ...el("r1", "Regno"), areas: [{ ...el("a1", "Foresta"), places: [{ ...el("p1", "Locanda"), scenes: [el("s2", "Cantina")] }] }] }] };
+  const hasTokens = { status: 409, body: { error: "errors.world.scene-has-tokens" } };
+
+  async function startDeleting(extra: Record<string, { status: number; body?: unknown }[]>) {
+    const server = await openWorld(dmWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: fullTree }, { status: 200, body: withoutSala }], ...extra });
+    fireEvent.click(await treeButton("Sala"));
+    fireEvent.click(await screen.findByRole("button", { name: "Elimina" }));
+    return server;
+  }
+
+  it("asks first, saying the tokens go with it, and does not delete anything yet", async () => {
+    const server = await startDeleting({ "DELETE /api/worlds/w1/scenes/s1": [hasTokens] });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("Questa scena contiene dei token. Eliminandola vengono eliminati anche loro, e non si può tornare indietro.");
+    expect(server.calls.filter((c) => c.startsWith("DELETE"))).toEqual(["DELETE /api/worlds/w1/scenes/s1"]);
+    // The refusal is a question, not an error message.
+    expect(screen.queryByText("Questa scena contiene dei token: eliminandola vengono eliminati anche loro.")).toBeNull();
+  });
+
+  it("deletes the scene and its tokens once the DM confirms, and the scene leaves the tree", async () => {
+    const server = await startDeleting({ "DELETE /api/worlds/w1/scenes/s1": [hasTokens], "DELETE /api/worlds/w1/scenes/s1?withTokens=true": [{ status: 204 }] });
+    fireEvent.click(await within(await screen.findByRole("alertdialog")).findByRole("button", { name: "Elimina scena e token" }));
+    await waitFor(() => { expect(server.calls).toContain("DELETE /api/worlds/w1/scenes/s1?withTokens=true"); });
+    await waitFor(() => { expect(treeLabel("Sala")).toBeNull(); });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(treeLabel("Cantina")).not.toBeNull();
+  });
+
+  it("leaves the scene alone when the DM changes their mind", async () => {
+    const server = await startDeleting({ "DELETE /api/worlds/w1/scenes/s1": [hasTokens] });
+    fireEvent.click(await within(await screen.findByRole("alertdialog")).findByRole("button", { name: "Annulla" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(server.calls.filter((c) => c.startsWith("DELETE"))).toHaveLength(1);
+    expect(treeLabel("Sala")).not.toBeNull();
+  });
+
+  it("a scene without tokens is deleted at once, with no question", async () => {
+    const server = await startDeleting({ "DELETE /api/worlds/w1/scenes/s1": [{ status: 204 }] });
+    await waitFor(() => { expect(server.calls).toContain("DELETE /api/worlds/w1/scenes/s1"); });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("other refusals are still shown as errors, also after the DM confirmed", async () => {
+    // The scene is still there after the refusal, so the tree is the same when it is read again.
+    await startDeleting({ "GET /api/worlds/w1/tree": [{ status: 200, body: fullTree }], "DELETE /api/worlds/w1/scenes/s1": [hasTokens], "DELETE /api/worlds/w1/scenes/s1?withTokens=true": [{ status: 409, body: { error: "errors.world.scene-in-use" } }] });
+    fireEvent.click(await within(await screen.findByRole("alertdialog")).findByRole("button", { name: "Elimina scena e token" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Questa scena è quella in gioco al tavolo: aprine un'altra prima di eliminarla.");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+});
+
 describe("exits from a scene", () => {
   const twoLinks = { links: [{ id: "l1", fromSceneId: "s1", toSceneId: "s2", label: "Botola" }] };
 

@@ -1,4 +1,5 @@
 import type { TableEvent } from "@phoenix/shared";
+import { RateLimiter } from "./rate-limit";
 import { SerialQueue } from "./serial-queue";
 import type { Viewer } from "./visibility";
 
@@ -8,7 +9,8 @@ export type Client = {
   sessionKey: string;
   viewer: Viewer;
   send(event: TableEvent): void;
-  close(): void;
+  /** Closes the connection; `code` tells the client why (it does not reconnect on the codes that mean "over"). */
+  close(code?: number): void;
 };
 
 /**
@@ -19,6 +21,37 @@ export type Client = {
 export class TableHub {
   private readonly rooms = new Map<string, Set<Client>>();
   private readonly queue = new SerialQueue();
+  private readonly pointerLimits = new Map<string, RateLimiter>();
+
+  /**
+   * Whether this person may send one more pointer position now. The allowance is theirs, whatever number of connections
+   * they have open, so opening more of them does not give more room.
+   */
+  allowPointer(accountId: string, nowMs: number, limit: number, windowMs: number): boolean {
+    let limiter = this.pointerLimits.get(accountId);
+    if (limiter === undefined) {
+      limiter = new RateLimiter(limit, windowMs);
+      this.pointerLimits.set(accountId, limiter);
+    }
+    return limiter.allow(nowMs);
+  }
+
+  /** How many connections this person has to the table of this session. */
+  connections(sessionId: string, accountId: string): number {
+    return this.clients(sessionId).filter((c) => c.viewer.accountId === accountId).length;
+  }
+
+  /**
+   * Makes room for one more connection of this person: while they already have `max`, the oldest is closed (with the
+   * code that tells the client it was replaced). A person cannot hold open an unlimited number of connections.
+   */
+  limitAccount(sessionId: string, accountId: string, max: number, replacedCode: number): void {
+    const mine = this.clients(sessionId).filter((c) => c.viewer.accountId === accountId);
+    for (const client of mine.slice(0, Math.max(0, mine.length - max + 1))) {
+      this.leave(sessionId, client);
+      client.close(replacedCode);
+    }
+  }
 
   /** How many changes to the table of a session are running or waiting. */
   queued(sessionId: string): number {
@@ -41,6 +74,8 @@ export class TableHub {
     if (room === undefined) return;
     room.delete(client);
     if (room.size === 0) this.rooms.delete(sessionId);
+    // The allowance of a person who has no connection left is forgotten, so the map does not grow forever.
+    if (this.connections(sessionId, client.viewer.accountId) === 0) this.pointerLimits.delete(client.viewer.accountId);
   }
 
   clients(sessionId: string): Client[] {

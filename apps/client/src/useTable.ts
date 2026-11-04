@@ -9,7 +9,7 @@ export function useTable(worldId: string): { state: TableState; send: (command: 
   const [state, dispatch] = useReducer(reduce, initialState);
   const connection = useRef<Connection | null>(null);
   useEffect(() => {
-    const conn = connectTable(tableUrl(worldId, window.location), { onEvent: (event) => { dispatch({ type: "event", event }); }, onStatus: (status) => { dispatch({ type: "connection", status }); } }, browserDeps);
+    const conn = connectTable(tableUrl(worldId, window.location), { onEvent: (event) => { dispatch({ type: "event", event, at: Date.now() }); }, onStatus: (status) => { dispatch({ type: "connection", status }); } }, browserDeps);
     connection.current = conn;
     return () => {
       conn.close();

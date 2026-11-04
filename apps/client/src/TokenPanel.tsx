@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent } from "react";
-import { firstFreeSpot, MAX_TOKEN_SIZE, TOKEN_COLORS, t, type TableCommand, type TableScene, type TokenColor, type TokenView } from "@phoenix/shared";
+import { firstFreeSpot, MAX_TOKEN_SIZE, TEXT_MAX_LENGTH, TOKEN_COLORS, TOKEN_LABEL_MAX_LENGTH, t, type TableCommand, type TableScene, type TokenColor, type TokenView } from "@phoenix/shared";
 import { api } from "./api";
+import { Icon } from "./Icons";
 import { useGuarded } from "./useGuarded";
 import type { Me } from "./table/state";
 
@@ -101,8 +102,9 @@ function AddToken({ worldId, scene, tokens, people, send }: { worldId: string; s
     const name = label.trim();
     if (name === "") return;
     // A new token appears in the first free square of the start zone, so it never lands on another.
-    const spot = firstFreeSpot(scene.start, size, tokens);
-    if (send({ type: "token.add", label: name, color, x: spot.x, y: spot.y, size, hidden, travels, ownerAccountId: owner, imageId })) {
+    // Only figures take a square: a text lying there does not keep a token out.
+    const spot = firstFreeSpot(scene.start, size, tokens.filter((tk) => tk.kind === "token"));
+    if (send({ type: "token.add", kind: "token", label: name, color, x: spot.x, y: spot.y, size, hidden, travels, ownerAccountId: owner, imageId })) {
       // What is specific to one token must not carry over to the next (a Goblin is not Aldric's).
       setLabel("");
       setImageId(null);
@@ -133,10 +135,32 @@ function AddToken({ worldId, scene, tokens, people, send }: { worldId: string; s
   );
 }
 
-function Selected({ token, worldId, me, people, send, onSelect }: { token: TokenView; worldId: string; me: Me; people: readonly Person[]; send: Props["send"]; onSelect: Props["onSelect"] }) {
+/** Writing a text on the map without the mouse: the words go to the start zone, where the DM moves them from the list. */
+function AddText({ scene, tokens, send }: { scene: TableScene; tokens: readonly TokenView[]; send: Props["send"] }) {
+  const [text, setText] = useState("");
+  const write = (): void => {
+    const words = text.trim();
+    if (words === "") return;
+    const spot = firstFreeSpot(scene.start, 1, tokens.map((tk) => ({ x: tk.x, y: tk.y, size: 1 })));
+    if (send({ type: "token.add", kind: "text", label: words, color: "gold", x: spot.x, y: spot.y, size: 1, hidden: false, travels: false, ownerAccountId: null, imageId: null })) setText("");
+  };
+  return (
+    <form className="stack tight" onSubmit={(e) => { e.preventDefault(); write(); }}>
+      <h3>{t("ui.world.table.token.new-text")}</h3>
+      <label className="field">
+        {t("ui.world.table.draft.text")}
+        <input value={text} maxLength={TEXT_MAX_LENGTH} onChange={(e) => { setText(e.target.value); }} />
+      </label>
+      <button type="submit" className="btn quiet">{t("ui.world.table.draft.confirm")}</button>
+    </form>
+  );
+}
+
+function Details({ token, worldId, me, people, send, onClose }: { token: TokenView; worldId: string; me: Me; people: readonly Person[]; send: Props["send"]; onClose: () => void }) {
   const isDm = me.role === "dm";
   const canMove = isDm || token.ownerAccountId === me.accountId;
   const guard = useGuarded();
+  const [name, setName] = useState(token.label);
   const update = (changes: { hidden?: boolean; travels?: boolean; color?: TokenColor; size?: number; ownerAccountId?: string | null; imageId?: string }): void => {
     send({ type: "token.update", tokenId: token.id, ...changes });
   };
@@ -144,6 +168,12 @@ function Selected({ token, worldId, me, people, send, onSelect }: { token: Token
     <section className="stack tight" aria-label={t("ui.world.table.token.selected")}>
       <h3 className="row"><Dot color={token.color} hidden={token.hidden} />{token.label}</h3>
       <p className="muted small">{t("ui.world.table.token.position", { x: token.x, y: token.y })}</p>
+      {isDm && (
+        <form className="row nowrap" onSubmit={(e) => { e.preventDefault(); const label = name.trim(); if (label !== "" && label !== token.label) send({ type: "token.update", tokenId: token.id, label }); }}>
+          <input value={name} maxLength={token.kind === "text" ? TEXT_MAX_LENGTH : TOKEN_LABEL_MAX_LENGTH} aria-label={t("ui.world.table.token.label")} onChange={(e) => { setName(e.target.value); }} />
+          <button type="submit" className="btn quiet small">{t("ui.world.table.token.rename")}</button>
+        </form>
+      )}
       {canMove && (
         <div className="dpad" role="group" aria-label={t("ui.world.table.token.title")}>
           {STEPS.map((s) => (
@@ -162,25 +192,38 @@ function Selected({ token, worldId, me, people, send, onSelect }: { token: Token
               {token.hidden ? t("ui.world.table.token.show") : t("ui.world.table.token.hide")}
             </button>
           </div>
-          <div className="form-grid">
-            <ColorSelect value={token.color} onChange={(color) => { update({ color }); }} />
-            <SizeSelect value={token.size} onChange={(size) => { update({ size }); }} />
-          </div>
-          <OwnerSelect value={token.ownerAccountId} people={people} onChange={(ownerAccountId) => { update({ ownerAccountId }); }} />
-          <label className="switch"><input type="checkbox" checked={token.travels} onChange={(e) => { update({ travels: e.target.checked }); }} />{t("ui.world.table.token.travels")}</label>
-          <PictureInput worldId={worldId} onPicked={(imageId) => { update({ imageId }); }} error={guard.error} run={guard.run} />
-          <button type="button" className="btn danger" onClick={() => { send({ type: "token.remove", tokenId: token.id }); onSelect(null); }}>{t("ui.world.table.token.remove")}</button>
+          {token.kind === "token" && (
+            <>
+              <div className="form-grid">
+                <ColorSelect value={token.color} onChange={(color) => { update({ color }); }} />
+                <SizeSelect value={token.size} onChange={(size) => { update({ size }); }} />
+              </div>
+              <OwnerSelect value={token.ownerAccountId} people={people} onChange={(ownerAccountId) => { update({ ownerAccountId }); }} />
+              <PictureInput worldId={worldId} onPicked={(imageId) => { update({ imageId }); }} error={guard.error} run={guard.run} />
+            </>
+          )}
+          {token.kind === "token" && <label className="switch"><input type="checkbox" checked={token.travels} onChange={(e) => { update({ travels: e.target.checked }); }} />{t("ui.world.table.token.travels")}</label>}
+          <button type="button" className="btn danger" onClick={() => { send({ type: "token.remove", tokenId: token.id }); onClose(); }}>{t("ui.world.table.token.remove")}</button>
         </>
       )}
     </section>
   );
 }
 
-/** The tokens on the board, the one picked, and (for the DM) the form to add more. */
-export function TokenPanel({ worldId, scene, me, tokens, selectedId, onSelect, people, send }: Props) {
-  const selected = tokens.find((tk) => tk.id === selectedId) ?? null;
+/** The details of one token (name, position, and for the DM everything that can be changed). */
+export function TokenDetailsPanel({ token, worldId, me, people, send, onClose }: { token: TokenView; worldId: string; me: Me; people: readonly Person[]; send: Props["send"]; onClose: () => void }) {
   return (
-    <section className="panel stack" aria-label={t("ui.world.table.token.title")}>
+    <section className="panel hud-panel" aria-label={t("ui.world.table.hud.details")}>
+      <h2 className="section-title">{t("ui.world.table.hud.details")}</h2>
+      <Details key={token.id} token={token} worldId={worldId} me={me} people={people} send={send} onClose={onClose} />
+    </section>
+  );
+}
+
+/** The tokens of the scene, to pick from a list (and so reachable without the mouse), and for the DM the form to add more. */
+export function TokensPanel({ worldId, scene, me, tokens, selectedIds, onSelect, people, send }: { worldId: string; scene: TableScene; me: Me; tokens: readonly TokenView[]; selectedIds: ReadonlySet<string>; onSelect: (id: string) => void; people: readonly Person[]; send: Props["send"] }) {
+  return (
+    <section className="panel hud-panel" aria-label={t("ui.world.table.token.title")}>
       <h2 className="section-title">{t("ui.world.table.token.title")}</h2>
       {tokens.length === 0 ? (
         <p className="muted small">{t("ui.world.table.token.none")}</p>
@@ -188,8 +231,8 @@ export function TokenPanel({ worldId, scene, me, tokens, selectedId, onSelect, p
         <ul className="token-list" aria-label={t("ui.world.table.token.list")}>
           {tokens.map((tk) => (
             <li key={tk.id}>
-              <button type="button" className="tree-pick" aria-current={tk.id === selectedId ? "true" : undefined} aria-label={t("ui.world.table.token.select", { name: tk.label })} onClick={() => { onSelect(tk.id); }}>
-                <Dot color={tk.color} hidden={tk.hidden} />
+              <button type="button" className="tree-pick" aria-current={selectedIds.has(tk.id) ? "true" : undefined} aria-label={t("ui.world.table.token.select", { name: tk.label })} onClick={() => { onSelect(tk.id); }}>
+                {tk.kind === "text" ? <Icon name="text" /> : <Dot color={tk.color} hidden={tk.hidden} />}
                 <span className="label">{tk.label}</span>
                 {tk.ownerAccountId === me.accountId && <span className="badge gold">{t("ui.world.table.token.mine")}</span>}
                 {me.role === "dm" && <span className={tk.hidden ? "vis" : "vis on"} aria-hidden="true" />}
@@ -198,8 +241,8 @@ export function TokenPanel({ worldId, scene, me, tokens, selectedId, onSelect, p
           ))}
         </ul>
       )}
-      {selected === null ? <p className="muted small">{t("ui.world.table.token.pick-one")}</p> : <Selected key={selected.id} token={selected} worldId={worldId} me={me} people={people} send={send} onSelect={onSelect} />}
       {me.role === "dm" && <AddToken worldId={worldId} scene={scene} tokens={tokens} people={people} send={send} />}
+      {me.role === "dm" && <AddText scene={scene} tokens={tokens} send={send} />}
     </section>
   );
 }

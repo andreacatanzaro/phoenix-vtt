@@ -1,6 +1,6 @@
 import type { TableEvent } from "@phoenix/shared";
 import { describe, expect, it } from "vitest";
-import { BACKOFF_MS, connectTable, END_CODE, MAX_ATTEMPTS, PING_MS, SIGNED_OUT_CODE, tableUrl, type SocketLike } from "./connection";
+import { BACKOFF_MS, connectTable, END_CODE, MAX_ATTEMPTS, PING_MS, REPLACED_CODE, SIGNED_OUT_CODE, tableUrl, type SocketLike } from "./connection";
 
 class FakeSocket implements SocketLike {
   readyState = 0;
@@ -118,6 +118,14 @@ describe("connectTable", () => {
     const h = harness();
     h.sockets[0]?.open();
     h.sockets[0]?.drop(SIGNED_OUT_CODE);
+    expect(h.statuses.at(-1)).toBe("ended");
+    expect(h.sockets).toHaveLength(1);
+  });
+
+  it("stops for good when the person opened too many connections and this was the oldest", () => {
+    const h = harness();
+    h.sockets[0]?.open();
+    h.sockets[0]?.drop(REPLACED_CODE);
     expect(h.statuses.at(-1)).toBe("ended");
     expect(h.sockets).toHaveLength(1);
   });

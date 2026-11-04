@@ -22,6 +22,20 @@
       "when": 1793729476782,
       "tag": "0002_flat_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793790457420,
+      "tag": "0003_famous_sphinx",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793817946700,
+      "tag": "0004_confused_kid_colt",
+      "breakpoints": true
     }
   ]
 }

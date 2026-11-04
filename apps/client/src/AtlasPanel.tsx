@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type SyntheticEvent } from "react";
 import { t, type ElementCollection, type SceneLinkView, type WorldTree } from "@phoenix/shared";
-import { api } from "./api";
+import { api, ApiFailure } from "./api";
 import { CHILD_OF, branches, indexTree, sceneOptions, type Branch, type Entry } from "./tree";
 import { useGuarded } from "./useGuarded";
 
@@ -110,7 +110,30 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone }:
   const [name, setName] = useState(node.name);
   const [description, setDescription] = useState(node.description);
   const [notes, setNotes] = useState(node.dmNotes ?? "");
+  // A scene that still has tokens is deleted only after the DM has said so, with the tokens.
+  const [askAboutTokens, setAskAboutTokens] = useState(false);
   const child = CHILD_OF[collection];
+
+  async function remove(withTokens: boolean): Promise<void> {
+    setAskAboutTokens(false);
+    const outcome: { gone: boolean; asked: boolean } = { gone: false, asked: false };
+    await run(async () => {
+      try {
+        await api.deleteElement(worldId, collection, node.id, { withTokens });
+        outcome.gone = true;
+      } catch (e) {
+        if (e instanceof ApiFailure && e.key === "errors.world.scene-has-tokens" && !withTokens) {
+          setAskAboutTokens(true);
+          outcome.asked = true;
+          return;
+        }
+        throw e;
+      }
+    });
+    if (outcome.gone) onGone();
+    // Nothing changed while the question is open, so there is nothing to reload; every other outcome refreshes the tree.
+    if (!outcome.asked) await onChange();
+  }
 
   async function save(event: SyntheticEvent): Promise<void> {
     event.preventDefault();
@@ -152,15 +175,19 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone }:
           <button
             type="button"
             className="btn danger small"
-            onClick={() => {
-              void run(() => api.deleteElement(worldId, collection, node.id)).then(async (ok) => {
-                if (ok) onGone();
-                await onChange();
-              });
-            }}
+            onClick={() => { void remove(false); }}
           >
             {t("ui.world.structure.delete")}
           </button>
+        </div>
+      )}
+      {askAboutTokens && (
+        <div className="notice stack tight" role="alertdialog" aria-label={t("ui.world.structure.confirm-scene-tokens")}>
+          <p>{t("ui.world.structure.confirm-scene-tokens")}</p>
+          <div className="row">
+            <button type="button" className="btn danger small" onClick={() => { void remove(true); }}>{t("ui.world.structure.confirm-delete")}</button>
+            <button type="button" className="btn quiet small" onClick={() => { setAskAboutTokens(false); }}>{t("ui.world.structure.keep-scene")}</button>
+          </div>
         </div>
       )}
       {error !== null && <p role="alert" className="notice">{error}</p>}
