@@ -108,6 +108,23 @@ Requisiti aggiunti dall'autore dopo l'ondata 3. Nessuno è ancora fatto: il test
 | I token piazzati sono copie indipendenti dalla libreria | §9 | fatto | `apps/server/src/token-library.test.ts` |
 | Aggiungere token alle scene dalla libreria, in preparazione e al tavolo | §10 | parziale: si aggiungono con un pulsante; il trascinamento sulla mappa non c'è | `apps/client/src/LibraryPanel.test.tsx`, `apps/client/src/TablePage.test.tsx` |
 
+## Struttura come grafo (richiesta dall'autore dopo l'atlante, parte della 3b)
+
+| Requisito | Rif. | Stato | Test |
+| --- | --- | --- | --- |
+| La gestione di Regione, Area, Luogo e Scena è un grafo su un cielo notturno: la Regione è un gruppo che contiene Aree, l'Area un gruppo che contiene Luoghi, il Luogo un gruppo che contiene Scene | §10 | fatto | `apps/client/src/WorldPageAtlas.test.tsx`, `apps/client/src/graph/GraphCanvas.test.tsx` |
+| Si entra in un gruppo (pulsante o doppio clic) e il percorso in alto riporta indietro, un livello alla volta | §10 | fatto | `apps/client/src/WorldPageAtlas.test.tsx` |
+| Il grafo si muove come una mappa (trascinare il cielo, rotella, pulsanti, mostra tutto, anche per nodi molto lontani) e, quando cambia la larghezza, tiene fermo il nodo scelto (o il centro se non ce n'è) | §10 | fatto | `apps/client/src/graph/GraphCanvas.test.tsx` |
+| Il DM trascina i nodi e la posizione si salva per elemento; si possono bloccare; ai giocatori non si muovono | §9, §10 | fatto | `apps/server/src/graph-positions.test.ts`, `apps/client/src/graph/GraphCanvas.test.tsx`, `apps/client/src/WorldPageAtlas.test.tsx` |
+| Senza una posizione salvata il layout dà a ogni nodo il suo posto, sempre lo stesso, senza spostare gli altri | §10 | fatto | `apps/client/src/graph/layout.test.ts` |
+| Il DM aggiunge un elemento per nome dalla barra («Aggiungi Regione/Area/Luogo/Scena»); dove il gruppo ha una mappa il pulsante diventa «Aggiungi … sulla mappa» e apre i dettagli, e un rifiuto del server resta scritto sullo schermo | §10 | fatto | `apps/client/src/WorldPageAtlas.test.tsx` |
+| Le scene di un luogo si collegano con linee: «Collega da scena…» e poi l'altra scena; una linea scelta porta ai dettagli della scena di partenza | §10 | fatto | `apps/client/src/graph/GraphCanvas.test.tsx`, `apps/client/src/WorldPageAtlas.test.tsx` |
+| Scegliere un nodo apre a destra i dettagli (note, visibilità, mappe, uscite, preparazione, tavolo) | §10 | fatto | `apps/client/src/WorldPageAtlas.test.tsx`, `apps/client/src/WorldPage.test.tsx` |
+| «Trova» elenca ogni elemento col suo percorso e porta lì | §10 | fatto | `apps/client/src/WorldPageAtlas.test.tsx` |
+| Un giocatore cammina il grafo in sola lettura e vede ciò che è rivelato (senza ciò che aspetta di essere piazzato) | §8, §10 | fatto | `apps/client/src/WorldPageAtlas.test.tsx` |
+| Ciò che potrebbe stare su una mappa che esiste e non è stato piazzato ha il segno «Da piazzare» sul nodo | §10 | fatto | `apps/client/src/WorldPageAtlas.test.tsx`, `apps/client/src/tree.test.ts` |
+| L'id della mappa da battaglia di una scena non arriva ai giocatori nell'elenco delle scene | §8 | fatto | `apps/server/src/atlas.test.ts` |
+
 ## Ondata 4a — Editor di scena e visione (subito dopo la 3b)
 
 | Requisito | Rif. | Stato | Test |

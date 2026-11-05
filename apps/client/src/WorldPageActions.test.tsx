@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { fakeServer } from "./test-helpers";
+import { fakeServer, pickElement } from "./test-helpers";
 
 afterEach(() => {
   cleanup();
@@ -30,11 +30,7 @@ async function openScene(name: string, ids: { s2?: Context; s3?: Context }, extr
   });
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "Apri Phoenix" }));
-  const nav = await screen.findByRole("navigation", { name: "Struttura" });
-  await within(nav).findByText("Locanda", { selector: ".label" }).then((x) => x.closest("button")).then((b) => { if (b !== null) fireEvent.click(b); });
-  const button = (await within(nav).findByText(name, { selector: ".label" })).closest("button");
-  if (button === null) throw new Error("no scene button");
-  fireEvent.click(button);
+  await pickElement(name);
   return server;
 }
 

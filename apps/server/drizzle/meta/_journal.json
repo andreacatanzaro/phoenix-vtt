@@ -50,6 +50,13 @@
       "when": 1793879242341,
       "tag": "0006_curious_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793895528625,
+      "tag": "0007_naive_maestro",
+      "breakpoints": true
     }
   ]
 }

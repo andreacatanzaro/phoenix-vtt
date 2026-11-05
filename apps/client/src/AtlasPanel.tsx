@@ -1,23 +1,34 @@
 import { useCallback, useEffect, useMemo, useState, type SyntheticEvent } from "react";
 import { t, type ElementCollection, type SceneLinkView, type WorldTree } from "@phoenix/shared";
-import { api, ApiFailure } from "./api";
+import { api, ApiFailure, imageUrl } from "./api";
 import { ElementMap } from "./atlas/ElementMap";
-import { ancestors, CHILD_OF, branches, indexTree, placedOnly, sceneOptions, unplaced, type Branch, type Entry, type Unplaced as UnplacedItem } from "./tree";
+import { GraphCanvas, type GraphEdge, type GraphNode } from "./graph/GraphCanvas";
+import { placeNodes } from "./graph/layout";
+import { ancestors, indexTree, placedOnly, sceneOptions, unplaced, type Entry } from "./tree";
 import { useGuarded } from "./useGuarded";
 
-/** Structure of a world: the tree on the left, what is selected on the right. The DM edits; a player only reads. */
-/** `onPrepare` opens the preparation of a scene (DM only): the table screen on that scene, without a session. */
+/** The four levels of the structure, from the top: what the graph shows at each depth of the path. */
+const LEVELS: readonly ElementCollection[] = ["regions", "areas", "places", "scenes"];
+
+/**
+ * The structure of a world as a graph, in the way of a story builder: the regions are groups, a region holds areas, an
+ * area holds places, a place holds scenes. A group is gone into; the path above says where you are. What is picked shows
+ * its details on the right. The DM adds, moves and links; a player only walks it.
+ * `onPrepare` opens the preparation of a scene (DM only): the table screen on that scene, without a session.
+ */
 export function AtlasPanel({ worldId, isDm, onPrepare }: { worldId: string; isDm: boolean; onPrepare: (sceneId: string) => void }) {
   const [tree, setTree] = useState<WorldTree | null>(null);
   const [links, setLinks] = useState<SceneLinkView[]>([]);
+  // The groups gone into, from the region down; what is picked in the group being shown.
+  const [path, setPath] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const [adding, setAdding] = useState(false);
   const { error, run } = useGuarded();
 
   const reload = useCallback(async () => {
     await run(async () => {
       const [loaded, exits] = await Promise.all([api.tree(worldId), isDm ? api.sceneLinks(worldId) : Promise.resolve([])]);
-      // A player walks the atlas on its maps: what is not on one yet is not shown. The DM sees everything.
+      // A player walks the atlas on its maps: what waits to be placed on one is not shown. The DM sees everything.
       setTree(isDm ? loaded : placedOnly(loaded));
       setLinks(exits);
     });
@@ -28,84 +39,150 @@ export function AtlasPanel({ worldId, isDm, onPrepare }: { worldId: string; isDm
   }, [reload]);
 
   const index = useMemo(() => (tree === null ? new Map<string, Entry>() : indexTree(tree)), [tree]);
-  const current = selected === null ? undefined : index.get(selected);
-  // The first region is shown until something else is picked, or when what was picked is gone.
-  const shown = current ?? (tree?.regions[0] === undefined ? undefined : index.get(tree.regions[0].id));
+  // The path as far as it still holds: an element that was deleted ends it there.
+  const here = useMemo(() => {
+    const valid: string[] = [];
+    for (const id of path) {
+      const entry = index.get(id);
+      if (entry === undefined || entry.parentId !== (valid.at(-1) ?? null) || entry.collection === "scenes") break;
+      valid.push(id);
+    }
+    return valid;
+  }, [path, index]);
+  const waiting = useMemo(() => new Set(tree === null ? [] : unplaced(tree).map((x) => x.id)), [tree]);
 
   if (tree === null) return <p className="muted">{error ?? t("ui.loading")}</p>;
 
-  const toggle = (id: string): void => {
-    setFolded((before) => {
-      const next = new Set(before);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
+  const parentId = here.at(-1) ?? null;
+  const level = LEVELS[here.length] ?? "scenes";
+  const childIds = parentId === null ? tree.regions.map((r) => r.id) : (index.get(parentId)?.children ?? []).map((c) => c.id);
+  const items = childIds.flatMap((id) => {
+    const entry = index.get(id);
+    return entry === undefined ? [] : [entry];
+  });
+  const positions = placeNodes(items.map((entry) => ({ id: entry.node.id, at: entry.node.graphX != null && entry.node.graphY != null ? { x: entry.node.graphX, y: entry.node.graphY } : null })));
+  const nodes: GraphNode[] = items.map((entry) => ({
+    id: entry.node.id,
+    label: entry.node.name,
+    shape: level === "scenes" ? "scene" : "group",
+    level,
+    at: positions.get(entry.node.id) ?? { x: 0, y: 0 },
+    ...(level === "scenes" ? {} : { count: entry.children.length }),
+    selected: selected === entry.node.id,
+    hidden: isDm && !entry.node.revealed,
+    waiting: isDm && waiting.has(entry.node.id),
+    imageSrc: entry.node.mapImageId != null ? imageUrl(worldId, entry.node.mapImageId) : null,
+  }));
+  // The exits between the scenes of this place are lines; the ones to other places are in the details of the scene.
+  const shown = new Set(items.map((entry) => entry.node.id));
+  const names = new Map(items.map((entry) => [entry.node.id, entry.node.name]));
+  const edges: GraphEdge[] = level !== "scenes" ? [] : links.filter((l) => shown.has(l.fromSceneId) && shown.has(l.toSceneId)).map((l) => ({
+    id: l.id,
+    from: l.fromSceneId,
+    to: l.toSceneId,
+    label: l.label === "" ? t("ui.world.atlas.exit-label", { from: names.get(l.fromSceneId) ?? "", to: names.get(l.toSceneId) ?? "" }) : t("ui.world.atlas.exit-label-named", { from: names.get(l.fromSceneId) ?? "", to: names.get(l.toSceneId) ?? "", label: l.label }),
+  }));
+
+  /** Shows an element: the groups above it are gone into, and it is picked. */
+  const goTo = (id: string): void => {
+    const entry = index.get(id);
+    if (entry === undefined) return;
+    setPath(ancestors(index, id).map((a) => a.id));
+    setSelected(id);
+    setAdding(false);
   };
+  const detail = selected === null ? undefined : index.get(selected);
+  // Where the group being shown has a map to put its children on, they are put on it, from the details of the group;
+  // where it has none (and always for the regions), they are added by name.
+  const parent = parentId === null ? undefined : index.get(parentId);
+  const onMap = parent !== undefined && (parent.collection === "areas" ? parent.node.polygon != null : parent.node.mapImageId != null);
+  const everything = [...index.values()];
 
   return (
     <div className="stack">
       {error !== null && <p role="alert" className="notice">{error}</p>}
-      <div className="atlas">
-        <nav className="tree-panel tree" aria-label={t("ui.world.tabs.structure")}>
-          {tree.regions.length === 0 && <p className="muted small" style={{ padding: "0.5rem" }}>{isDm ? t("ui.world.structure.empty-dm") : t("ui.world.structure.empty")}</p>}
-          <ul className="root">
-            {branches(tree).map((branch) => (
-              <TreeItem key={branch.node.id} branch={branch} collection="regions" isDm={isDm} selectedId={shown?.node.id ?? null} folded={folded} onPick={setSelected} onToggle={toggle} />
-            ))}
-          </ul>
-          {isDm && <div className="tree-add"><AddForm worldId={worldId} collection="regions" onDone={reload} onCreated={setSelected} /></div>}
-          {isDm && <UnplacedList items={unplaced(tree)} selectedId={shown?.node.id ?? null} onPick={setSelected} />}
+      <div className="graph-bar">
+        <nav className="graph-path" aria-label={t("ui.world.graph.path")}>
+          <button type="button" className="crumb" aria-current={here.length === 0 ? "location" : undefined} onClick={() => { setPath([]); setSelected(null); setAdding(false); }}>{t("ui.world.graph.world")}</button>
+          {here.map((id, i) => (
+            <span key={id}>
+              {" › "}
+              <button type="button" className="crumb" aria-current={i === here.length - 1 ? "location" : undefined} onClick={() => { setPath(here.slice(0, i + 1)); setSelected(null); setAdding(false); }}>{index.get(id)?.node.name ?? ""}</button>
+            </span>
+          ))}
         </nav>
-        <div>
-          {shown !== undefined ? (
+        <div className="row">
+          {isDm && !onMap && <button type="button" className="btn small" aria-expanded={adding} onClick={() => { setAdding((a) => !a); }}>{t(`ui.world.graph.add.${level}`)}</button>}
+          {isDm && onMap && <button type="button" className="btn small" onClick={() => { setAdding(false); setSelected(parentId); }}>{t(`ui.world.graph.add-on-map.${level}`)}</button>}
+          {parentId !== null && <button type="button" className="btn quiet small" onClick={() => { setSelected(parentId); }}>{t("ui.world.graph.edit-group")}</button>}
+          <label className="graph-find">
+            <span className="sr-only">{t("ui.world.graph.find")}</span>
+            <select value="" aria-label={t("ui.world.graph.find")} onChange={(e) => { if (e.target.value !== "") goTo(e.target.value); }}>
+              <option value="">{t("ui.world.graph.find")}…</option>
+              {everything.map((entry) => <option key={entry.node.id} value={entry.node.id}>{entry.path.join(" › ")}</option>)}
+            </select>
+          </label>
+        </div>
+      </div>
+      {isDm && adding && (
+        <AddNode
+          key={String(parentId)}
+          label={t(`ui.world.new.${level}`)}
+          create={async (name) => {
+            const ok = await run(async () => { await api.createElement(worldId, level, { name, ...(parentId === null ? {} : { parentId }) }); });
+            if (ok) {
+              setAdding(false);
+              await reload();
+            }
+          }}
+          cancel={() => { setAdding(false); }}
+        />
+      )}
+      <div className={detail === undefined ? "struct-layout" : "struct-layout with-detail"}>
+        <GraphCanvas
+          nodes={nodes}
+          edges={edges}
+          canEdit={isDm}
+          fitKey={here.join("/")}
+          empty={t(isDm ? "ui.world.graph.empty-dm" : "ui.world.graph.empty")}
+          onSelect={setSelected}
+          onEnter={(id) => { setPath([...here, id]); setSelected(null); setAdding(false); }}
+          onMove={(id, x, y) => { void run(async () => { await api.updateElement(worldId, level, id, { graphX: Math.round(x), graphY: Math.round(y) }); }).then((ok) => (ok ? reload() : undefined)); }}
+          onEdge={(id) => { const link = links.find((l) => l.id === id); if (link !== undefined) setSelected(link.fromSceneId); }}
+          onConnect={(from, to) => { void run(async () => { await api.createSceneLink(worldId, { fromSceneId: from, toSceneId: to, label: "" }); }).then((ok) => (ok ? reload() : undefined)); }}
+        />
+        {detail !== undefined && (
+          <aside className="struct-detail" aria-label={t("ui.world.structure.detail")}>
+            <button type="button" className="btn quiet small struct-close" aria-label={t("ui.world.structure.close")} onClick={() => { setSelected(null); }}>×</button>
             <Detail
-              key={shown.node.id}
+              key={detail.node.id}
               worldId={worldId}
-              entry={shown}
+              entry={detail}
               isDm={isDm}
               links={links}
               tree={tree}
-              onPick={setSelected}
+              onPick={goTo}
               onChange={reload}
-              onGone={() => { setSelected(shown.parentId); }}
+              onGone={() => { setSelected(null); }}
               onPrepare={onPrepare}
-              trail={ancestors(index, shown.node.id)}
+              trail={ancestors(index, detail.node.id)}
             />
-          ) : (
-            <p className="muted">{t("ui.world.structure.pick")}</p>
-          )}
-        </div>
+          </aside>
+        )}
       </div>
     </div>
   );
 }
 
-function TreeItem({ branch, collection, isDm, selectedId, folded, onPick, onToggle }: { branch: Branch; collection: ElementCollection; isDm: boolean; selectedId: string | null; folded: ReadonlySet<string>; onPick: (id: string) => void; onToggle: (id: string) => void }) {
-  const child = CHILD_OF[collection];
-  const hasChildren = branch.children.length > 0 && child !== null;
-  const open = !folded.has(branch.node.id);
+/** The name of what is being added to the group being shown. */
+function AddNode({ label, create, cancel }: { label: string; create: (name: string) => Promise<void>; cancel: () => void }) {
+  const [name, setName] = useState("");
   return (
-    <li>
-      <div className="tree-row">
-        {hasChildren ? (
-          <button type="button" className="fold" aria-expanded={open} aria-label={t("ui.world.structure.fold", { name: branch.node.name })} onClick={() => { onToggle(branch.node.id); }}>
-          </button>
-        ) : (
-          <span className="spacer" />
-        )}
-        <button type="button" className="tree-pick" aria-current={selectedId === branch.node.id} onClick={() => { onPick(branch.node.id); }}>
-          {isDm && <span className={branch.node.revealed ? "vis on" : "vis"} role="img" aria-label={branch.node.revealed ? t("ui.world.structure.visible") : t("ui.world.structure.hidden")} />}
-          <span className={`label ${collection === "regions" ? "region" : collection === "scenes" ? "scene" : ""}`}>{branch.node.name}</span>
-        </button>
-      </div>
-      {hasChildren && open && (
-        <ul>
-          {branch.children.map((c) => (
-            <TreeItem key={c.node.id} branch={c} collection={child} isDm={isDm} selectedId={selectedId} folded={folded} onPick={onPick} onToggle={onToggle} />
-          ))}
-        </ul>
-      )}
-    </li>
+    <form className="row" onSubmit={(e) => { e.preventDefault(); const trimmed = name.trim(); if (trimmed !== "") void create(trimmed); }}>
+      <input style={{ flex: 1, minWidth: "9rem", width: "auto" }} aria-label={label} placeholder={label} value={name} onChange={(e) => { setName(e.target.value); }} maxLength={120} required autoFocus />
+      <button type="submit" className="btn small">{t("ui.world.structure.add")}</button>
+      <button type="button" className="btn quiet small" onClick={cancel}>{t("ui.world.structure.cancel")}</button>
+    </form>
   );
 }
 
@@ -138,12 +215,6 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, o
   const [notes, setNotes] = useState(node.dmNotes ?? "");
   // A scene that still has tokens is deleted only after the DM has said so, with the tokens.
   const [askAboutTokens, setAskAboutTokens] = useState(false);
-  const child = CHILD_OF[collection];
-  // A map is not required. Where there is one to put the children on (a region or a place with a map, an area drawn on it)
-  // they are put on it; where there is none, they are made by name, as plain elements of the list.
-  const hasMapForChildren = collection === "areas" ? node.polygon != null : node.mapImageId != null;
-  const canAddByName = isDm && child !== null && collection !== "scenes" && !hasMapForChildren;
-
   async function remove(withTokens: boolean): Promise<void> {
     setAskAboutTokens(false);
     const outcome: { gone: boolean; asked: boolean } = { gone: false, asked: false };
@@ -263,20 +334,6 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, o
 
       <ElementMap worldId={worldId} isDm={isDm} tree={tree} links={links} collection={collection} id={node.id} onPick={onPick} onChange={onChange} />
 
-      {(entry.children.length > 0 || canAddByName) && child !== null && (
-        <section>
-          <h3 className="section-title">{t("ui.world.structure.contains")}</h3>
-          <ul className="child-list">
-            {entry.children.map((c) => (
-              <li key={c.id}>
-                <button type="button" className="btn text" onClick={() => { onPick(c.id); }}>{c.name}</button>
-              </li>
-            ))}
-          </ul>
-          {canAddByName && <div style={{ marginTop: "0.75rem" }}><AddForm worldId={worldId} collection={child} parentId={node.id} onDone={onChange} onCreated={onPick} /></div>}
-        </section>
-      )}
-
       {isDm && collection === "scenes" && (
         <div>
           <button type="button" className="btn" onClick={() => { void prepare(); }}>{t("ui.world.structure.prepare")}</button>
@@ -362,53 +419,6 @@ function Exits({ worldId, sceneId, links, tree, onChange }: { worldId: string; s
         </form>
       )}
       {error !== null && <p role="alert" className="notice">{error}</p>}
-    </section>
-  );
-}
-
-function AddForm({ worldId, collection, parentId, onDone, onCreated }: { worldId: string; collection: ElementCollection; parentId?: string; onDone: () => Promise<void>; onCreated: (id: string) => void }) {
-  const [name, setName] = useState("");
-  const { error, run } = useGuarded();
-
-  async function submit(event: SyntheticEvent): Promise<void> {
-    event.preventDefault();
-    let createdId = "";
-    const ok = await run(async () => {
-      const created = await api.createElement(worldId, collection, { name, ...(parentId === undefined ? {} : { parentId }) });
-      createdId = created.id;
-    });
-    if (ok) {
-      setName("");
-      await onDone();
-      onCreated(createdId);
-    }
-  }
-
-  return (
-    <form className="row" onSubmit={(e) => void submit(e)}>
-      <input style={{ flex: 1, minWidth: "9rem", width: "auto" }} aria-label={t(`ui.world.new.${collection}`)} placeholder={t(`ui.world.new.${collection}`)} value={name} onChange={(e) => { setName(e.target.value); }} maxLength={120} required />
-      <button type="submit" className="btn quiet small">{t("ui.world.structure.add")}</button>
-      {error !== null && <span role="alert" className="error small">{error}</span>}
-    </form>
-  );
-}
-
-/** What was made before the maps, or was taken off one: it waits here to be placed on a map or deleted. */
-function UnplacedList({ items, selectedId, onPick }: { items: UnplacedItem[]; selectedId: string | null; onPick: (id: string) => void }) {
-  if (items.length === 0) return null;
-  return (
-    <section className="tree-add stack tight" aria-label={t("ui.world.atlas.unplaced-title")}>
-      <h3 className="section-title">{t("ui.world.atlas.unplaced-title")}</h3>
-      <p className="muted small">{t("ui.world.atlas.unplaced-hint")}</p>
-      <ul className="child-list">
-        {items.map((item) => (
-          <li key={item.id}>
-            <button type="button" className="btn text" aria-current={selectedId === item.id} title={item.path} onClick={() => { onPick(item.id); }}>
-              {item.name} <span className="muted small">({t(`ui.world.kind.${item.collection}`)})</span>
-            </button>
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }

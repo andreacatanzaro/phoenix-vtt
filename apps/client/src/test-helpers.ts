@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 
 export type Route = { status: number; body?: unknown };
@@ -36,4 +36,20 @@ export function buttonNamed(name: string): HTMLButtonElement {
   const found = screen.getByRole("button", { name });
   if (!(found instanceof HTMLButtonElement)) throw new Error(`"${name}" is not a button`);
   return found;
+}
+
+/**
+ * Shows an element of the structure by its name: "Trova" lists every element with the path above it, and choosing one goes
+ * into the groups above it and picks it, so its details are on screen.
+ */
+export async function pickElement(name: string): Promise<void> {
+  const select = await screen.findByLabelText("Trova");
+  const option = await within(select).findByText((_, element) => element instanceof HTMLOptionElement && element.textContent.split(" › ").at(-1) === name);
+  if (!(option instanceof HTMLOptionElement)) throw new Error(`"${name}" is not an option`);
+  fireEvent.change(select, { target: { value: option.value } });
+}
+
+/** The node of the graph with this name, if it is on the screen. */
+export function graphNode(name: string): HTMLElement | null {
+  return within(screen.getByTestId("graph-sky")).queryByRole("button", { name });
 }

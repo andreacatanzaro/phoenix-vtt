@@ -13,6 +13,10 @@ export const collectionSchema = z.enum(ELEMENT_COLLECTIONS);
 const nameSchema = z.string().trim().min(1).max(ELEMENT_NAME_MAX_LENGTH);
 const textSchema = z.string().max(ELEMENT_TEXT_MAX_LENGTH);
 
+/** How far from the middle of the graph of the structure an element may be put, in the units of the graph. */
+export const GRAPH_LIMIT = 100000;
+const graphCoordinate = z.number().min(-GRAPH_LIMIT).max(GRAPH_LIMIT);
+
 /** A place on a map, as a fraction of the width and height of the picture (0 to 1). */
 export const mapPointSchema = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) });
 export const MIN_POLYGON_POINTS = 3;
@@ -32,6 +36,9 @@ export const createElementSchema = z.object({
   parentId: z.uuid().optional(),
   polygon: polygonSchema.optional(),
   pin: mapPointSchema.optional(),
+  /** Where the element is on the graph of the structure (the layout puts it somewhere when it is missing). */
+  graphX: graphCoordinate.optional(),
+  graphY: graphCoordinate.optional(),
 });
 export type CreateElementInput = z.infer<typeof createElementSchema>;
 
@@ -47,6 +54,9 @@ export const updateElementSchema = z
     polygon: polygonSchema.nullable(),
     /** The pin of a place (inside its area) or of a scene (on the map of its place); null takes it off the map. */
     pin: mapPointSchema.nullable(),
+    /** Where the element is on the graph of the structure; null forgets it, and the layout puts the element somewhere. */
+    graphX: graphCoordinate.nullable(),
+    graphY: graphCoordinate.nullable(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0);
@@ -65,6 +75,8 @@ const elementBase = {
   mapImageId: z.string().nullable().optional(),
   polygon: polygonSchema.nullable().optional(),
   pin: mapPointSchema.nullable().optional(),
+  graphX: z.number().nullable().optional(),
+  graphY: z.number().nullable().optional(),
 };
 export const sceneViewSchema = z.object(elementBase);
 export const placeViewSchema = z.object({ ...elementBase, scenes: z.array(sceneViewSchema) });

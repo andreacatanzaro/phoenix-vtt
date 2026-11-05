@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { fakeServer } from "./test-helpers";
+import { fakeServer, graphNode, pickElement } from "./test-helpers";
 
 afterEach(() => {
   cleanup();
@@ -28,19 +28,6 @@ const playerTree = {
   regions: [{ ...el("r1", "Regno"), areas: [{ ...el("a1", "Foresta", { polygon: shape }), places: [{ ...el("p1", "Locanda", { description: "Una locanda accogliente", pin: { x: 0.5, y: 0.3 } }), scenes: [el("s1", "Sala", { pin: { x: 0.5, y: 0.5 } })] }] }] }],
 };
 
-/** The label of an entry of the tree, or null when it is not there. */
-function treeLabel(name: string): HTMLElement | null {
-  return within(screen.getByRole("navigation", { name: "Struttura" })).queryByText(name, { selector: ".label" });
-}
-
-/** The button of an entry of the tree, once it has appeared. */
-async function treeButton(name: string): Promise<HTMLElement> {
-  const nav = await screen.findByRole("navigation", { name: "Struttura" });
-  const button = (await within(nav).findByText(name, { selector: ".label" })).closest("button");
-  if (button === null) throw new Error(`"${name}" is not a button`);
-  return button;
-}
-
 /** The nth field with this label: the edit form of a session comes before the creation form at the bottom. */
 function fieldAt(label: string, index = 0): HTMLInputElement | HTMLTextAreaElement {
   const found = screen.getAllByLabelText(label)[index];
@@ -65,7 +52,7 @@ async function openWorld(world: typeof dmWorld, routes: Record<string, { status:
 describe("opening a world", () => {
   it("opens from the list and goes back", async () => {
     await openWorld(dmWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [] } }] });
-    expect(await screen.findByText("Il mondo è vuoto. Comincia con la prima regione.")).toBeTruthy();
+    expect(await screen.findByText("Qui non c'è ancora niente: usa «Aggiungi» per cominciare.")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Phoenix" })).toBeTruthy();
     expect(screen.getByText("Dungeon Master")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Tutti i mondi" }));
@@ -92,21 +79,27 @@ describe("opening a world", () => {
 });
 
 describe("the structure", () => {
-  it("shows the DM the whole tree, with a mark for what the players can see", async () => {
+  it("shows the DM the regions as groups, and a group is gone into, down to the scenes", async () => {
     await openWorld(dmWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: fullTree }] });
-    for (const name of ["Regno", "Foresta", "Locanda", "Sala", "Cantina"]) expect(await treeButton(name)).toBeTruthy();
-    expect(screen.getAllByRole("img", { name: "Visibile ai giocatori" })).toHaveLength(5);
+    expect(await screen.findByRole("button", { name: "Regno" })).toBeTruthy();
+    expect(graphNode("Foresta")).toBeNull();
+    for (const [group, inside] of [["Regno", "Foresta"], ["Foresta", "Locanda"], ["Locanda", "Sala"]] as const) {
+      fireEvent.click(graphNode(group) ?? document.body);
+      fireEvent.click(screen.getByRole("button", { name: "Entra nel gruppo" }));
+      expect(await within(screen.getByTestId("graph-sky")).findByRole("button", { name: inside })).toBeTruthy();
+    }
+    expect(graphNode("Cantina")).not.toBeNull();
   });
 
   it("marks what is still hidden from the players", async () => {
     const hidden = { regions: [{ ...el("r1", "Regno", { revealed: false }), areas: [] }] };
     await openWorld(dmWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: hidden }] });
-    expect(await screen.findByRole("img", { name: "Nascosto ai giocatori" })).toBeTruthy();
+    expect((await screen.findByRole("button", { name: "Regno" })).className).toContain("hidden");
   });
 
   it("the DM picks an element and sees its notes, its switch and its controls", async () => {
     await openWorld(dmWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: fullTree }] });
-    fireEvent.click(await treeButton("Sala"));
+    await pickElement("Sala");
     expect(await screen.findByText("trappola sotto il tappeto")).toBeTruthy();
     expect(screen.getByText("Solo per il DM")).toBeTruthy();
     expect(screen.getByRole("checkbox")).toBeTruthy();
@@ -116,38 +109,32 @@ describe("the structure", () => {
 
   it("shows a player only what was revealed, without notes or controls", async () => {
     await openWorld(playerWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: playerTree }] });
-    fireEvent.click(await treeButton("Locanda"));
+    await pickElement("Locanda");
     expect(await screen.findByText("Una locanda accogliente")).toBeTruthy();
-    expect(treeLabel("Cantina")).toBeNull();
+    expect(screen.queryByRole("option", { name: /Cantina/ })).toBeNull();
     expect(screen.queryByText("trappola sotto il tappeto")).toBeNull();
     expect(screen.queryByRole("button", { name: "Elimina" })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
-    expect(screen.queryByRole("img", { name: "Visibile ai giocatori" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Aggiungi/ })).toBeNull();
   });
 
   it("a player with nothing revealed is told there is nothing to see yet", async () => {
     await openWorld(playerWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [] } }] });
-    expect(await screen.findByText("Il DM non ha ancora rivelato niente di questo mondo.")).toBeTruthy();
+    expect(await screen.findByText("Qui non c'è ancora niente.")).toBeTruthy();
   });
 
-  it("folds and unfolds a branch of the tree", async () => {
-    await openWorld(dmWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: fullTree }] });
-    expect(await treeButton("Locanda")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Apri o chiudi Foresta" }));
-    expect(treeLabel("Locanda")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Apri o chiudi Foresta" }));
-    expect(treeLabel("Locanda")).not.toBeNull();
-  });
-
-  it("the DM adds a region, the tree reloads and the new region is selected", async () => {
+  it("the DM adds a region by name, and the graph reloads with it", async () => {
     const server = await openWorld(dmWorld, {
       "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [] } }, { status: 200, body: { regions: [{ ...el("r9", "Nuovo regno"), areas: [] }] } }],
       "POST /api/worlds/w1/regions": [{ status: 201, body: { element: el("r9", "Nuovo regno") } }],
     });
-    fireEvent.change(await screen.findByLabelText("Nuova regione"), { target: { value: "Nuovo regno" } });
+    expect(await screen.findByText("Qui non c'è ancora niente: usa «Aggiungi» per cominciare.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Regione" }));
+    fireEvent.change(screen.getByLabelText("Nuova regione"), { target: { value: "Nuovo regno" } });
     fireEvent.click(screen.getByRole("button", { name: "Aggiungi" }));
-    expect(await screen.findByRole("heading", { name: "Nuovo regno" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Nuovo regno" })).toBeTruthy();
     expect(server.bodies["POST /api/worlds/w1/regions"]).toEqual([{ name: "Nuovo regno" }]);
+    expect(screen.queryByLabelText("Nuova regione")).toBeNull();
   });
 
   it("the DM reveals an element and the change is sent", async () => {
@@ -155,6 +142,7 @@ describe("the structure", () => {
       "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [{ ...el("r1", "Regno", { revealed: false }), areas: [] }] } }],
       "PATCH /api/worlds/w1/regions/r1": [{ status: 200, body: { element: el("r1", "Regno") } }],
     });
+    fireEvent.click(await screen.findByRole("button", { name: "Regno" }));
     fireEvent.click(await screen.findByRole("checkbox"));
     await waitFor(() => { expect(server.bodies["PATCH /api/worlds/w1/regions/r1"]).toEqual([{ revealed: true }]); });
   });
@@ -164,6 +152,7 @@ describe("the structure", () => {
       "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [{ ...el("r1", "Regno", { dmNotes: "vecchia nota" }), areas: [] }] } }],
       "PATCH /api/worlds/w1/regions/r1": [{ status: 200, body: { element: el("r1", "Regno antico") } }],
     });
+    fireEvent.click(await screen.findByRole("button", { name: "Regno" }));
     fireEvent.click(await screen.findByRole("button", { name: "Modifica" }));
     fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Regno antico" } });
     fireEvent.change(screen.getByLabelText("Descrizione (la vedono i giocatori)"), { target: { value: "Molto vecchio" } });
@@ -176,6 +165,7 @@ describe("the structure", () => {
       "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [{ ...el("r1", "Regno"), areas: [] }] } }],
       "DELETE /api/worlds/w1/regions/r1": [{ status: 409, body: { error: "errors.world.not-empty" } }],
     });
+    fireEvent.click(await screen.findByRole("button", { name: "Regno" }));
     fireEvent.click(await screen.findByRole("button", { name: "Elimina" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Non si può eliminare un elemento che contiene altri elementi.");
   });
@@ -187,7 +177,7 @@ describe("deleting a scene that has tokens", () => {
 
   async function startDeleting(extra: Record<string, { status: number; body?: unknown }[]>) {
     const server = await openWorld(dmWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: fullTree }, { status: 200, body: withoutSala }], ...extra });
-    fireEvent.click(await treeButton("Sala"));
+    await pickElement("Sala");
     fireEvent.click(await screen.findByRole("button", { name: "Elimina" }));
     return server;
   }
@@ -201,13 +191,13 @@ describe("deleting a scene that has tokens", () => {
     expect(screen.queryByText("Questa scena contiene dei token: eliminandola vengono eliminati anche loro.")).toBeNull();
   });
 
-  it("deletes the scene and its tokens once the DM confirms, and the scene leaves the tree", async () => {
+  it("deletes the scene and its tokens once the DM confirms, and the scene leaves the graph", async () => {
     const server = await startDeleting({ "DELETE /api/worlds/w1/scenes/s1": [hasTokens], "DELETE /api/worlds/w1/scenes/s1?withTokens=true": [{ status: 204 }] });
     fireEvent.click(await within(await screen.findByRole("alertdialog")).findByRole("button", { name: "Elimina scena e token" }));
     await waitFor(() => { expect(server.calls).toContain("DELETE /api/worlds/w1/scenes/s1?withTokens=true"); });
-    await waitFor(() => { expect(treeLabel("Sala")).toBeNull(); });
+    await waitFor(() => { expect(graphNode("Sala")).toBeNull(); });
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(treeLabel("Cantina")).not.toBeNull();
+    expect(graphNode("Cantina")).not.toBeNull();
   });
 
   it("leaves the scene alone when the DM changes their mind", async () => {
@@ -215,7 +205,7 @@ describe("deleting a scene that has tokens", () => {
     fireEvent.click(await within(await screen.findByRole("alertdialog")).findByRole("button", { name: "Annulla" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(server.calls.filter((c) => c.startsWith("DELETE"))).toHaveLength(1);
-    expect(treeLabel("Sala")).not.toBeNull();
+    expect(graphNode("Sala")).not.toBeNull();
   });
 
   it("a scene without tokens is deleted at once, with no question", async () => {
@@ -242,7 +232,7 @@ describe("exits from a scene", () => {
       "GET /api/worlds/w1/scene-links": [{ status: 200, body: twoLinks }, { status: 200, body: { links: [...twoLinks.links, { id: "l2", fromSceneId: "s1", toSceneId: "s2", label: "Scala" }] } }],
       "POST /api/worlds/w1/scene-links": [{ status: 201, body: { link: { id: "l2", fromSceneId: "s1", toSceneId: "s2", label: "Scala" } } }],
     });
-    fireEvent.click(await treeButton("Sala"));
+    await pickElement("Sala");
     const exit = (await screen.findByText("Botola")).closest("li");
     if (exit === null) throw new Error("the exit is not in a list item");
     expect(within(exit).getByText(/Regno › Foresta › Locanda › Cantina/)).toBeTruthy();
@@ -258,7 +248,7 @@ describe("exits from a scene", () => {
       "GET /api/worlds/w1/tree": [{ status: 200, body: fullTree }],
       "GET /api/worlds/w1/scene-links": [{ status: 200, body: twoLinks }],
     });
-    fireEvent.click(await treeButton("Cantina"));
+    await pickElement("Cantina");
     expect(await screen.findByText("Da questa scena non parte nessuna uscita.")).toBeTruthy();
     const options = within(screen.getByLabelText("Scena di arrivo")).getAllByRole("option").map((o) => o.textContent);
     expect(options).toEqual(["Scegli la scena di arrivo", "Regno › Foresta › Locanda › Sala"]);
@@ -270,13 +260,13 @@ describe("exits from a scene", () => {
       "GET /api/worlds/w1/tree": [{ status: 200, body: onlyOne }],
       "GET /api/worlds/w1/scene-links": [{ status: 200, body: { links: [] } }],
     });
-    fireEvent.click(await treeButton("Sala"));
+    await pickElement("Sala");
     expect(await screen.findByText("Servono almeno due scene per creare un'uscita.")).toBeTruthy();
   });
 
   it("a player never sees exits, and the exits are not even asked for", async () => {
     const server = await openWorld(playerWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: playerTree }] });
-    fireEvent.click(await treeButton("Sala"));
+    await pickElement("Sala");
     expect(screen.queryByText("Uscite")).toBeNull();
     expect(server.calls.some((c) => c.includes("scene-links"))).toBe(false);
   });

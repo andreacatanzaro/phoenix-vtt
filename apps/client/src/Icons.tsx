@@ -30,6 +30,13 @@ const PATHS = {
   help: <><circle cx="12" cy="12" r="8.500" /><path d="M9.700 9.500a2.400 2.400 0 1 1 3.300 2.200c-.7.400-1 .9-1 1.600M12 16.800h.01" /></>,
   close: <path d="M6 6l12 12M18 6 6 18" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  pin: <><path d="M12 21s6.500-6 6.500-11.200a6.500 6.500 0 0 0-13 0C5.500 15 12 21 12 21z" /><circle cx="12" cy="9.800" r="2.300" /></>,
+  enter: <path d="M5 12h13M13 6.500 18.500 12 13 17.500" />,
+  link: <path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1" />,
+  lock: <><rect x="5" y="10.500" width="14" height="9.500" rx="2" /><path d="M8 10.500V8a4 4 0 0 1 8 0v2.500" /></>,
+  unlock: <><rect x="5" y="10.500" width="14" height="9.500" rx="2" /><path d="M8 10.500V8a4 4 0 0 1 7.500-1.900" /></>,
+  fit: <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />,
+  minus: <path d="M5 12h14" />,
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof PATHS;

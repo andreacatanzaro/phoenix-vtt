@@ -387,3 +387,68 @@ kbd { display: inline-block; min-width: 1.5rem; padding: 0.05rem 0.4rem; text-al
 .atlas-pin-name { position: absolute; left: 50%; top: calc(100% + 0.25rem); transform: translateX(-50%); padding: 0.1rem 0.45rem; border-radius: 0.4rem; background: rgba(21, 26, 33, 0.94); border: 1px solid var(--traccia); color: var(--osso); font-size: var(--step--1); line-height: 1.3; white-space: nowrap; pointer-events: none; opacity: 0; }
 .atlas-pin:hover .atlas-pin-name, .atlas-pin:focus-visible .atlas-pin-name, .atlas-pin.selected .atlas-pin-name { opacity: 1; }
 @media (prefers-reduced-motion: no-preference) { .atlas-pin, .atlas-area { transition: box-shadow 120ms, fill 120ms; } }
+
+/* The structure of a world as a graph: round nodes over a night sky, groups that are gone into, scenes joined by lines. */
+.graph-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; }
+.graph-path { display: flex; flex-wrap: wrap; align-items: center; color: var(--nebbia); font-size: var(--step--1); }
+.graph-path .crumb[aria-current="location"] { color: var(--oro); text-decoration: none; cursor: default; }
+.graph-find select { min-width: 12rem; padding: 0.35rem 0.6rem; font-size: var(--step--1); }
+.struct-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(0.75rem, 2vw, 1.25rem); align-items: start; }
+.struct-layout.with-detail { grid-template-columns: minmax(0, 1fr) minmax(18rem, 27rem); }
+.struct-detail { position: relative; min-width: 0; max-height: min(80vh, 60rem); overflow-y: auto; }
+.struct-close { position: absolute; top: 0.5rem; right: 0.5rem; z-index: 2; }
+.graph-sky {
+  position: relative; overflow: hidden; height: clamp(26rem, 68vh, 46rem); border: 1px solid var(--traccia); border-radius: 8px; touch-action: none; cursor: grab; user-select: none;
+  background:
+    radial-gradient(1.2px 1.2px at 12% 18%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1px 1px at 27% 64%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1.4px 1.4px at 43% 33%, var(--oro-chiaro) 50%, transparent 52%),
+    radial-gradient(1px 1px at 58% 78%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 71% 22%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1px 1px at 86% 55%, var(--oro-chiaro) 50%, transparent 52%),
+    radial-gradient(1px 1px at 93% 86%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1.6px 1.6px at 6% 72%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 19% 44%, var(--oro-chiaro) 50%, transparent 52%),
+    radial-gradient(1.6px 1.6px at 35% 12%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1px 1px at 48% 58%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1.8px 1.8px at 64% 47%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 77% 91%, var(--oro-chiaro) 50%, transparent 52%),
+    radial-gradient(1.6px 1.6px at 90% 14%, var(--osso) 50%, transparent 52%),
+    radial-gradient(1px 1px at 98% 40%, var(--osso) 50%, transparent 52%),
+    radial-gradient(60% 55% at 22% 25%, rgba(232, 165, 48, 0.13), transparent 70%),
+    radial-gradient(55% 60% at 80% 75%, rgba(91, 139, 217, 0.12), transparent 70%),
+    var(--notte);
+}
+.graph-sky:active { cursor: grabbing; }
+.graph-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.graph-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.graph-edge { stroke: var(--osso); stroke-opacity: 0.45; stroke-width: 2; }
+.graph-link { position: absolute; width: 1.5rem; height: 1.5rem; margin: -0.75rem 0 0 -0.75rem; padding: 0.25rem; border-radius: 50%; background: var(--lavagna); border: 1px solid var(--oro); color: var(--oro); cursor: pointer; z-index: 1; }
+.graph-link:hover, .graph-link:focus-visible { background: var(--oro); color: var(--oro-ink); }
+.graph-link svg { width: 100%; height: 100%; }
+.graph-node { position: absolute; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--osso); cursor: pointer; font: inherit; }
+.graph-node:focus-visible { outline: 2px solid var(--oro); outline-offset: 4px; }
+.graph-disc { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; border-radius: 50%; border: 4px solid var(--oro); background: radial-gradient(circle at 35% 30%, var(--cartiglio), var(--lavagna)); box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5); }
+.graph-node.regions .graph-disc { border-color: var(--oro); }
+.graph-node.areas .graph-disc { border-color: var(--brace); }
+.graph-node.places .graph-disc { border-color: var(--verderame); }
+.graph-node.scenes .graph-disc { border-color: var(--verderame); color: var(--verderame); }
+.graph-node.selected .graph-disc, .graph-node:hover .graph-disc { box-shadow: 0 0 0 4px rgba(232, 165, 48, 0.45), 0 6px 22px rgba(0, 0, 0, 0.5); }
+.graph-node.linking .graph-disc { box-shadow: 0 0 0 4px rgba(70, 181, 143, 0.6), 0 6px 22px rgba(0, 0, 0, 0.5); }
+.graph-node.hidden .graph-disc { opacity: 0.45; }
+.graph-picture { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.graph-initial { font-family: var(--display); font-size: 2.6rem; color: var(--oro); }
+.graph-disc svg { width: 46%; height: 46%; }
+.graph-badge { position: absolute; left: 50%; bottom: -0.55rem; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0.55rem; border-radius: 999px; background: var(--oro); color: var(--oro-ink); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.graph-count { padding: 0 0.35rem; border-radius: 999px; background: rgba(23, 16, 5, 0.18); }
+.graph-waiting { position: absolute; left: 50%; top: -0.7rem; transform: translateX(-50%); padding: 0.05rem 0.5rem; border-radius: 999px; background: var(--brace); color: var(--osso); font-size: 0.68rem; white-space: nowrap; }
+.graph-name { position: absolute; left: 50%; top: calc(100% + 0.9rem); transform: translateX(-50%); max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--display); font-size: var(--step-0); text-shadow: 0 1px 6px #000; pointer-events: none; }
+.graph-actions { position: absolute; transform: translateX(-50%); display: flex; gap: 0.3rem; z-index: 3; margin-top: 1.4rem; }
+.graph-act { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0.35rem; border-radius: 0.5rem; border: 1px solid var(--oro-bordo); background: var(--oro); color: var(--oro-ink); cursor: pointer; }
+.graph-act svg { width: 100%; height: 100%; }
+.graph-hint { position: absolute; left: 50%; top: 0.75rem; transform: translateX(-50%); margin: 0; z-index: 4; }
+.graph-empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; color: var(--nebbia); font-family: var(--flavor); font-style: italic; text-align: center; }
+.graph-tools { position: absolute; top: 0.75rem; right: 0.75rem; z-index: 4; }
+.graph-zoom { min-width: 3rem; text-align: center; color: var(--nebbia); font-size: var(--step--1); }
+@media (max-width: 60rem) { .struct-layout.with-detail { grid-template-columns: minmax(0, 1fr); } .struct-detail { max-height: none; } }
+@media (prefers-reduced-motion: no-preference) { .graph-disc { transition: box-shadow 120ms; } }

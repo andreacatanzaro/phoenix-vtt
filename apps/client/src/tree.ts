@@ -24,6 +24,9 @@ export type TreeNode = {
   mapImageId?: string | null | undefined;
   polygon?: MapPoint[] | null | undefined;
   pin?: MapPoint | null | undefined;
+  /** Where the element is on the graph of the structure; the layout puts it somewhere while it is not set. */
+  graphX?: number | null | undefined;
+  graphY?: number | null | undefined;
 };
 export type Branch = { node: TreeNode; children: Branch[] };
 

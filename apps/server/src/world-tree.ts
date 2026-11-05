@@ -4,9 +4,9 @@ import { areas, gameSessions, images, places, regions, scenes, tokens } from "./
 import type { Database } from "./db/types";
 import { isForeignKeyViolation } from "./http";
 
-type Row = { id: string; name: string; description: string; dmNotes: string; revealed: boolean };
+type Row = { id: string; name: string; description: string; dmNotes: string; revealed: boolean; graphX: number | null; graphY: number | null };
 /** What a row has on the maps of the atlas, whichever of these its level has. */
-type Placement = { mapImageId?: string | null; polygon?: MapPoint[] | null; pin?: MapPoint | null };
+type Placement = { mapImageId?: string | null | undefined; polygon?: MapPoint[] | null | undefined; pin?: MapPoint | null | undefined };
 
 function view(row: Row & Placement, dm: boolean): ElementView {
   const base = {
@@ -14,6 +14,8 @@ function view(row: Row & Placement, dm: boolean): ElementView {
     name: row.name,
     description: row.description,
     revealed: row.revealed,
+    graphX: row.graphX,
+    graphY: row.graphY,
     ...(row.mapImageId === undefined ? {} : { mapImageId: row.mapImageId }),
     ...(row.polygon === undefined ? {} : { polygon: row.polygon }),
     ...(row.pin === undefined ? {} : { pin: row.pin }),
@@ -33,7 +35,8 @@ export async function loadTree(db: Database, worldId: string, dm: boolean): Prom
     db.select().from(scenes).where(eq(scenes.worldId, worldId)).orderBy(scenes.createdAt, scenes.id),
   ]);
   const shown = (row: Row): boolean => dm || row.revealed;
-  const sceneViews = (placeId: string): SceneView[] => sceneRows.filter((r) => r.placeId === placeId && shown(r)).map((r) => view(r, dm));
+  // The map of a scene is its battle map: players get it at the table when the scene is played, not in the list of scenes.
+  const sceneViews = (placeId: string): SceneView[] => sceneRows.filter((r) => r.placeId === placeId && shown(r)).map((r) => view(dm ? r : { ...r, mapImageId: undefined }, dm));
   const placeViews = (areaId: string): PlaceView[] =>
     placeRows.filter((r) => r.areaId === areaId && shown(r)).map((r) => ({ ...view(r, dm), scenes: sceneViews(r.id) }));
   const areaViews = (regionId: string): AreaView[] =>
@@ -84,9 +87,9 @@ export async function createElement(
   db: Database,
   worldId: string,
   collection: ElementCollection,
-  input: { name: string; description: string; dmNotes: string; parentId?: string | undefined; polygon?: MapPoint[] | undefined; pin?: MapPoint | undefined },
+  input: { name: string; description: string; dmNotes: string; parentId?: string | undefined; polygon?: MapPoint[] | undefined; pin?: MapPoint | undefined; graphX?: number | undefined; graphY?: number | undefined },
 ): Promise<CreateResult> {
-  const values = { worldId, name: input.name, description: input.description, dmNotes: input.dmNotes };
+  const values = { worldId, name: input.name, description: input.description, dmNotes: input.dmNotes, graphX: input.graphX ?? null, graphY: input.graphY ?? null };
   const done = (row: (Row & Placement) | undefined): CreateResult => {
     if (row === undefined) throw new Error("Insert returned no row");
     return { element: view(row, true) };

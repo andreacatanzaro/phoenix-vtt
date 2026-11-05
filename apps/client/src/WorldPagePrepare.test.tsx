@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./TablePage", () => ({
@@ -11,7 +11,7 @@ vi.mock("./TablePage", () => ({
 }));
 
 import { App } from "./App";
-import { fakeServer } from "./test-helpers";
+import { fakeServer, pickElement } from "./test-helpers";
 
 afterEach(() => {
   cleanup();
@@ -34,10 +34,7 @@ async function openWorld(role: "dm" | "player", table: { status: number; body?: 
   });
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "Apri Phoenix" }));
-  const nav = await screen.findByRole("navigation", { name: "Struttura" });
-  const button = (await within(nav).findByText("Sala", { selector: ".label" })).closest("button");
-  if (button === null) throw new Error("no scene button");
-  fireEvent.click(button);
+  await pickElement("Sala");
   return server;
 }
 
@@ -46,9 +43,9 @@ describe("opening the preparation of a scene", () => {
     await openWorld("dm");
     fireEvent.click(await screen.findByRole("button", { name: "Prepara la scena" }));
     expect((await screen.findByTestId("table")).dataset["scene"]).toBe("s1");
-    expect(screen.queryByRole("navigation", { name: "Struttura" })).toBeNull();
+    expect(screen.queryByTestId("graph-sky")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Esci dal mock" }));
-    expect(await screen.findByRole("navigation", { name: "Struttura" })).toBeTruthy();
+    expect(await screen.findByTestId("graph-sky")).toBeTruthy();
     expect(screen.queryByTestId("table")).toBeNull();
   });
 
@@ -57,7 +54,7 @@ describe("opening the preparation of a scene", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Prepara la scena" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Questa scena è in gioco al tavolo: si modifica dal tavolo, non in preparazione.");
     expect(screen.queryByTestId("table")).toBeNull();
-    expect(screen.getByRole("navigation", { name: "Struttura" })).toBeTruthy();
+    expect(screen.getByTestId("graph-sky")).toBeTruthy();
   });
 
   it("says so, and stays on the structure, when it cannot be asked", async () => {

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { areas } from "./db/schema";
+import { eq } from "drizzle-orm";
+import { areas, scenes } from "./db/schema";
 import { reclaimImages } from "./image-gc";
 import { atlasQueueKey } from "./world-tree";
 import { createTestApp, fakePng, field, idOf, makeClient, type TestApp } from "./test-support";
@@ -350,6 +351,17 @@ describe("what players get", () => {
     await update(m.w, "areas", m.area, { revealed: false });
     const r = await t.app.inject({ method: "GET", url: `${m.w.base}/images/${m.placeMap}`, cookies: { phoenix_session: m.w.player } });
     expect(r.statusCode).toBe(404);
+  });
+
+  it("the map of a scene (its battle map) is for the DM's list only: a player is not told which picture it is", async () => {
+    const m = await revealedAll("pl-scenemap");
+    await update(m.w, "scenes", m.scene, { name: "Sala" });
+    await t.db.update(scenes).set({ mapImageId: m.regionMap }).where(eq(scenes.id, m.scene));
+    const playerTree = await c.get(`${m.w.base}/tree`, m.w.player);
+    expect(field(playerTree, "regions", 0, "areas", 0, "places", 0, "scenes", 0, "mapImageId")).toBeUndefined();
+    expect(JSON.stringify(playerTree.json())).not.toContain("battle");
+    const dmTree = await c.get(`${m.w.base}/tree`, m.w.dm);
+    expect(field(dmTree, "regions", 0, "areas", 0, "places", 0, "scenes", 0, "mapImageId")).toBe(m.regionMap);
   });
 
   it("the DM's notes still never reach a player", async () => {

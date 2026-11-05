@@ -62,6 +62,9 @@ const element = () => ({
   description: text("description").notNull().default(""),
   dmNotes: text("dm_notes").notNull().default(""),
   revealed: boolean("revealed").notNull().default(false),
+  /** Where the element is on the graph of the structure; null until it is put somewhere (the layout decides meanwhile). */
+  graphX: doublePrecision("graph_x"),
+  graphY: doublePrecision("graph_y"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
