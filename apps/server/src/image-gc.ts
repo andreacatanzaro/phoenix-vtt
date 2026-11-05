@@ -1,5 +1,5 @@
 import { and, eq, inArray, lt, notExists, sql } from "drizzle-orm";
-import { images, places, regions, scenes, tokens } from "./db/schema";
+import { images, places, regions, scenes, tokenLibrary, tokens } from "./db/schema";
 import type { Database } from "./db/types";
 import type { ImageStore } from "./image-store";
 
@@ -37,6 +37,7 @@ export async function reclaimImages(db: Database, store: ImageStore, now: Date, 
     notExists(db.select({ one: sql`1` }).from(regions).where(eq(regions.mapImageId, images.id))),
     notExists(db.select({ one: sql`1` }).from(places).where(eq(places.mapImageId, images.id))),
     notExists(db.select({ one: sql`1` }).from(tokens).where(eq(tokens.imageId, images.id))),
+    notExists(db.select({ one: sql`1` }).from(tokenLibrary).where(eq(tokenLibrary.imageId, images.id))),
   );
   let removed = 0;
 

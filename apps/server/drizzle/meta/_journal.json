@@ -43,6 +43,13 @@
       "when": 1793827235021,
       "tag": "0005_even_jubilee",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793879242341,
+      "tag": "0006_curious_mongoose",
+      "breakpoints": true
     }
   ]
 }

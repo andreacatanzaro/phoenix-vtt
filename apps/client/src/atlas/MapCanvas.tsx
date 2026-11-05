@@ -8,9 +8,14 @@ export type MapPin = { id: string; label: string; at: MapPoint; selected: boolea
 export type MapArrow = { id: string; from: MapPoint; to: MapPoint; label: string; selected: boolean };
 /**
  * What a click on the picture does: nothing but pick (view), add a point to a shape (draw), place a pin (pin, inside an area
- * if one is given), or pick two pins, the start and the end of an exit (link).
+ * if one is given), pick two pins, the start and the end of an exit (link), or move the points of one shape (edit).
  */
-export type MapMode = { kind: "view" } | { kind: "draw" } | { kind: "pin"; inside?: readonly MapPoint[] | undefined } | { kind: "link" };
+export type MapMode =
+  | { kind: "view" }
+  | { kind: "draw" }
+  | { kind: "pin"; inside?: readonly MapPoint[] | undefined }
+  | { kind: "link" }
+  | { kind: "edit"; shapeId: string };
 
 export type MapCanvasProps = {
   src: string;
@@ -18,7 +23,11 @@ export type MapCanvasProps = {
   shapes?: readonly MapShape[];
   pins?: readonly MapPin[];
   arrows?: readonly MapArrow[];
+  /** Something drawn or placed that waits for a name before it exists: shown, not to be picked. */
+  ghost?: { polygon?: readonly MapPoint[] | undefined; pin?: MapPoint | undefined } | undefined;
   mode: MapMode;
+  /** The last change is still being saved: the points of the shape cannot be dragged until it is (a second edit would be built on the old shape). */
+  locked?: boolean;
   /** The pins can be dragged to another place (the DM). */
   movable?: boolean;
   onShape?: (id: string) => void;
@@ -28,6 +37,8 @@ export type MapCanvasProps = {
   /** A pin was placed where it cannot be (outside its area). */
   onRefused?: () => void;
   onMovePin?: (id: string, at: MapPoint) => void;
+  /** A point of the shape being edited was dragged: the new shape. */
+  onShapeEdited?: (shapeId: string, polygon: MapPoint[]) => void;
   onArrow?: (id: string) => void;
   /** Two pins were picked in order, to make an exit from the first to the second. */
   onLink?: (fromId: string, toId: string) => void;
@@ -39,12 +50,14 @@ const samePlace = (a: MapPoint, b: MapPoint): boolean => a.x === b.x && a.y === 
 const percent = (fraction: number): string => `${String(Math.round(fraction * 10000) / 100)}%`;
 
 type Drag = { id: string; from: { x: number; y: number }; moved: boolean; at: MapPoint };
+/** A point of a shape being dragged: which, where the pointer began, and where the point is now. */
+type VertexDrag = { index: number; from: { x: number; y: number }; moved: boolean; at: MapPoint };
 
 /**
  * A map picture with what the atlas puts on it: the areas as shapes, the places and the scenes as pins. The positions are
  * fractions of the picture, so they hold at any size. Everything that can be picked is a button, with its name.
  */
-export function MapCanvas({ src, alt, shapes = [], pins = [], arrows = [], mode, movable = false, onShape, onPin, onDrawn, onPlaced, onRefused, onMovePin, onArrow, onLink }: MapCanvasProps) {
+export function MapCanvas({ src, alt, shapes = [], pins = [], arrows = [], ghost, mode, locked = false, movable = false, onShape, onPin, onDrawn, onPlaced, onRefused, onMovePin, onShapeEdited, onArrow, onLink }: MapCanvasProps) {
   const surface = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<MapPoint[]>([]);
   // The drag is kept in a ref as well as in state: pointer events can come faster than the screen is drawn.
@@ -58,11 +71,18 @@ export function MapCanvas({ src, alt, shapes = [], pins = [], arrows = [], mode,
   // The drawing is as wide as the picture is: shapes and arrows are not stretched on a picture that is not square.
   const [width, setWidth] = useState(1);
   const [linkFrom, setLinkFrom] = useState<string | null>(null);
+  const vertex = useRef<VertexDrag | null>(null);
+  const [vertexLive, setVertexLive] = useState<VertexDrag | null>(null);
+  const setVertex = (next: VertexDrag | null): void => {
+    vertex.current = next;
+    setVertexLive(next);
+  };
 
   // A shape begun for one drawing is not kept for the next.
   useEffect(() => {
     if (mode.kind !== "draw") setDraft([]);
     if (mode.kind !== "link") setLinkFrom(null);
+    if (mode.kind !== "edit") setVertex(null);
   }, [mode.kind]);
 
   const box = (): { left: number; top: number; width: number; height: number } => {
@@ -71,7 +91,8 @@ export function MapCanvas({ src, alt, shapes = [], pins = [], arrows = [], mode,
   };
 
   const clickSurface = (e: ReactMouseEvent<HTMLDivElement>): void => {
-    if (mode.kind === "view" || mode.kind === "link") return;
+    // Only drawing and placing take clicks on the picture; picking, linking and editing the points of a shape do not.
+    if (mode.kind !== "draw" && mode.kind !== "pin") return;
     const at = { x: e.clientX, y: e.clientY };
     const point = toMapPoint(box(), at);
     if (mode.kind === "pin") {
@@ -106,6 +127,33 @@ export function MapCanvas({ src, alt, shapes = [], pins = [], arrows = [], mode,
     }
   };
 
+  const editing = mode.kind === "edit" ? mode.shapeId : null;
+  /** The shape being edited, as it is while a point is dragged. */
+  const editedShape = (shape: MapShape): readonly MapPoint[] => {
+    if (editing !== shape.id || vertexLive === null || !vertexLive.moved) return shape.polygon;
+    return shape.polygon.map((p, i) => (i === vertexLive.index ? vertexLive.at : p));
+  };
+  const startVertex = (e: ReactPointerEvent<HTMLButtonElement>, index: number, at: MapPoint): void => {
+    if (locked) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* a pointer that cannot be captured is still followed while it is over the point */ }
+    setVertex({ index, from: { x: e.clientX, y: e.clientY }, moved: false, at });
+  };
+  const moveVertex = (e: ReactPointerEvent<HTMLButtonElement>): void => {
+    const now = vertex.current;
+    if (now === null) return;
+    const moved = now.moved || Math.hypot(e.clientX - now.from.x, e.clientY - now.from.y) > CLICK_SLOP;
+    setVertex({ ...now, moved, at: moved ? toMapPoint(box(), { x: e.clientX, y: e.clientY }) : now.at });
+  };
+  const endVertex = (e: ReactPointerEvent<HTMLButtonElement>, shape: MapShape): void => {
+    const now = vertex.current;
+    if (now === null) return;
+    const moved = now.moved || Math.hypot(e.clientX - now.from.x, e.clientY - now.from.y) > CLICK_SLOP;
+    setVertex(null);
+    if (!moved) return;
+    const to = toMapPoint(box(), { x: e.clientX, y: e.clientY });
+    onShapeEdited?.(shape.id, shape.polygon.map((p, i) => (i === now.index ? to : p)));
+  };
+
   const pick = (e: KeyboardEvent, action: () => void): void => {
     if (e.key !== "Enter" && e.key !== " ") return;
     e.preventDefault();
@@ -134,7 +182,7 @@ export function MapCanvas({ src, alt, shapes = [], pins = [], arrows = [], mode,
 
   return (
     <div className="stack tight">
-      <div ref={surface} className={viewing ? "atlas-map" : mode.kind === "link" ? "atlas-map linking" : "atlas-map placing"} data-testid="atlas-map" onClick={clickSurface}>
+      <div ref={surface} className={viewing ? "atlas-map" : mode.kind === "link" ? "atlas-map linking" : mode.kind === "edit" ? "atlas-map editing" : "atlas-map placing"} data-testid="atlas-map" onClick={clickSurface}>
         <img
           src={src}
           alt={alt}
@@ -149,7 +197,7 @@ export function MapCanvas({ src, alt, shapes = [], pins = [], arrows = [], mode,
             <polygon
               key={shape.id}
               className={shape.selected ? "atlas-area selected" : "atlas-area"}
-              points={polygonAttribute(shape.polygon, width)}
+              points={polygonAttribute(editedShape(shape), width)}
               // The same rule as the check of a pin inside an area (`pointInPolygon`, even-odd), also for a shape that crosses itself.
               fillRule="evenodd"
               role="button"
@@ -182,11 +230,28 @@ export function MapCanvas({ src, alt, shapes = [], pins = [], arrows = [], mode,
               </g>
             );
           })}
+          {ghost?.polygon !== undefined && <polygon className="atlas-ghost" points={polygonAttribute(ghost.polygon, width)} fillRule="evenodd" aria-hidden="true" />}
           {draft.length > 1 && <polyline className="atlas-draft" points={polygonAttribute(draft, width)} fillRule="evenodd" />}
         </svg>
         {draft.map((p, i) => (
           <span key={i} className="atlas-draft-point" data-testid="atlas-draft-point" style={{ left: percent(p.x), top: percent(p.y) }} />
         ))}
+        {ghost?.pin !== undefined && <span className="atlas-ghost-pin" data-testid="atlas-ghost-pin" aria-hidden="true" style={{ left: percent(ghost.pin.x), top: percent(ghost.pin.y) }} />}
+        {shapes.filter((shape) => shape.id === editing).flatMap((shape) =>
+          editedShape(shape).map((p, index) => (
+            <button
+              key={`${shape.id}-${String(index)}`}
+              type="button"
+              className="atlas-vertex"
+              disabled={locked}
+              style={{ left: percent(p.x), top: percent(p.y) }}
+              aria-label={t("ui.world.atlas.vertex", { n: String(index + 1), name: shape.label })}
+              onPointerDown={(e) => { startVertex(e, index, p); }}
+              onPointerMove={moveVertex}
+              onPointerUp={(e) => { endVertex(e, shape); }}
+            />
+          )),
+        )}
         {pins.map((pin) => {
           const at = drag?.id === pin.id && drag.moved ? drag.at : pin.at;
           return (

@@ -103,10 +103,10 @@ Requisiti aggiunti dall'autore dopo l'ondata 3. Nessuno è ancora fatto: il test
 | Le uscite tra scene si tracciano come frecce tra i pin sulla mappa del luogo (più uscite per scena); per altri luoghi si sceglie da un elenco | §9, §10 | fatto | `apps/client/src/atlas/ElementMap.test.tsx`, `apps/client/src/atlas/MapCanvas.test.tsx`, `apps/client/src/atlas/map-geometry.test.ts` |
 | Navigazione: un clic su un'area o un pin apre la mappa contenuta, con il percorso in alto per tornare indietro | §10 | fatto | `apps/client/src/WorldPageAtlas.test.tsx`, `apps/client/src/atlas/ElementMap.test.tsx`, `apps/client/src/tree.test.ts` |
 | Visibilità come oggi (rivelato per elemento, note del DM mai ai giocatori); il server non invia ai giocatori né i pin né le mappe che non vedono; i giocatori navigano in sola lettura | §8, §9 | fatto | `apps/server/src/atlas.test.ts`, `apps/client/src/WorldPageAtlas.test.tsx` |
-| Le mappe di regioni e luoghi e i token della libreria seguono la visibilità e la pulizia delle immagini (`image-access`, `reclaimImages`) | §8 | parziale: fatte le mappe di regioni e luoghi; restano i token della libreria | `apps/server/src/atlas.test.ts` |
-| Libreria di token del mondo (nome, immagine, taglia, colore), visibile solo al DM | §9, §10 | da fare | — |
-| I token piazzati sono copie indipendenti dalla libreria | §9 | da fare | — |
-| Aggiungere token alle scene dalla libreria, in preparazione e al tavolo | §10 | da fare | — |
+| Le mappe di regioni e luoghi e i token della libreria seguono la visibilità e la pulizia delle immagini (`image-access`, `reclaimImages`) | §8 | fatto | `apps/server/src/atlas.test.ts`, `apps/server/src/token-library.test.ts` |
+| Libreria di token del mondo (nome, immagine, taglia, colore), visibile solo al DM | §9, §10 | fatto | `apps/server/src/token-library.test.ts`, `apps/client/src/LibraryPanel.test.tsx` |
+| I token piazzati sono copie indipendenti dalla libreria | §9 | fatto | `apps/server/src/token-library.test.ts` |
+| Aggiungere token alle scene dalla libreria, in preparazione e al tavolo | §10 | parziale: si aggiungono con un pulsante; il trascinamento sulla mappa non c'è | `apps/client/src/LibraryPanel.test.tsx`, `apps/client/src/TablePage.test.tsx` |
 
 ## Ondata 4a — Editor di scena e visione (subito dopo la 3b)
 

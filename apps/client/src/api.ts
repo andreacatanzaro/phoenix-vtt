@@ -3,6 +3,8 @@ import {
   accountResponseSchema,
   apiErrorSchema,
   elementResponseSchema,
+  libraryTokenResponseSchema,
+  libraryTokensResponseSchema,
   imageResponseSchema,
   memberResponseSchema,
   membersResponseSchema,
@@ -18,6 +20,9 @@ import {
   type CreateSessionInput,
   type ElementCollection,
   type ElementView,
+  type LibraryTokenInput,
+  type LibraryTokenUpdate,
+  type LibraryTokenView,
   type MapPoint,
   type ImageKind,
   type ImageView,
@@ -103,6 +108,18 @@ export const api = {
   },
   async tree(worldId: string): Promise<WorldTree> {
     return call("GET", `${world(worldId)}/tree`, worldTreeSchema);
+  },
+  async tokenLibrary(worldId: string): Promise<LibraryTokenView[]> {
+    return (await call("GET", `${world(worldId)}/token-library`, libraryTokensResponseSchema)).tokens;
+  },
+  async createLibraryToken(worldId: string, input: LibraryTokenInput): Promise<LibraryTokenView> {
+    return (await call("POST", `${world(worldId)}/token-library`, libraryTokenResponseSchema, input)).token;
+  },
+  async updateLibraryToken(worldId: string, tokenId: string, patch: LibraryTokenUpdate): Promise<LibraryTokenView> {
+    return (await call("PATCH", `${world(worldId)}/token-library/${encodeURIComponent(tokenId)}`, libraryTokenResponseSchema, patch)).token;
+  },
+  async deleteLibraryToken(worldId: string, tokenId: string): Promise<void> {
+    await call("DELETE", `${world(worldId)}/token-library/${encodeURIComponent(tokenId)}`, null);
   },
   async createElement(worldId: string, collection: ElementCollection, input: { name: string; parentId?: string; polygon?: MapPoint[]; pin?: MapPoint }): Promise<ElementView> {
     return (await call("POST", `${world(worldId)}/${collection}`, elementResponseSchema, input)).element;

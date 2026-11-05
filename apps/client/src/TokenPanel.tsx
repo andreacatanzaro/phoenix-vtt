@@ -29,7 +29,7 @@ function Dot({ color, hidden }: { color: TokenColor; hidden?: boolean }) {
   return <span className={`dot ${color}${hidden === true ? " dim" : ""}`} aria-hidden="true" />;
 }
 
-function ColorSelect({ value, onChange }: { value: TokenColor; onChange: (c: TokenColor) => void }) {
+export function ColorSelect({ value, onChange }: { value: TokenColor; onChange: (c: TokenColor) => void }) {
   return (
     <label className="field">
       {t("ui.world.table.token.color")}
@@ -56,7 +56,7 @@ function OwnerSelect({ value, people, onChange }: { value: string | null; people
   );
 }
 
-function SizeSelect({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+export function SizeSelect({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
     <label className="field">
       {t("ui.world.table.token.size")}
@@ -70,7 +70,7 @@ function SizeSelect({ value, onChange }: { value: number; onChange: (n: number) 
 }
 
 /** Uploads a token picture and gives back its id, or null when none was chosen. */
-function PictureInput({ worldId, onPicked, error, run }: { worldId: string; onPicked: (id: string) => void; error: string | null; run: (a: () => Promise<void>) => Promise<boolean> }) {
+export function PictureInput({ worldId, onPicked, error, run }: { worldId: string; onPicked: (id: string) => void; error: string | null; run: (a: () => Promise<void>) => Promise<boolean> }) {
   const choose = async (e: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = e.target.files?.[0];
     e.target.value = "";

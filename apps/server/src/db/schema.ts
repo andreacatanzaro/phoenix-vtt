@@ -107,6 +107,21 @@ export const images = pgTable(
   (t) => [index("images_world_idx").on(t.worldId), check("images_kind", sql`${t.kind} in ('map', 'token')`)],
 );
 
+/** The tokens a DM loads once for the world, to put on scenes as copies. Only the DM sees them. */
+export const tokenLibrary = pgTable(
+  "token_library",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    worldId: worldRef(),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("gold"),
+    size: integer("size").notNull().default(1),
+    imageId: uuid("image_id").references(() => images.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("token_library_world_idx").on(t.worldId), check("token_library_size", sql`${t.size} between 1 and 8`)],
+);
+
 export const scenes = pgTable(
   "scenes",
   {

@@ -5,6 +5,7 @@ import { errorText } from "./messages";
 import { Board, type BoardHandle } from "./Board";
 import { ChatPanel } from "./ChatPanel";
 import { Icon, type IconName } from "./Icons";
+import { LibraryPanel } from "./LibraryPanel";
 import { PlayersPanel } from "./PlayersPanel";
 import { AlignBar } from "./AlignBar";
 import { SceneControls } from "./SceneControls";
@@ -21,7 +22,7 @@ import { ToolColumn } from "./ToolColumn";
 import { ToolOptions } from "./ToolOptions";
 import { useTable } from "./useTable";
 
-type Panel = "players" | "chat" | "tokens" | "details" | "scenes";
+type Panel = "players" | "chat" | "tokens" | "details" | "scenes" | "library";
 
 /**
  * The live table, the way Owlbear Rodeo lays it out: the map fills the whole screen and everything else floats over it.
@@ -236,6 +237,7 @@ export function TablePage({ worldId, prepareSceneId, onLeave }: { worldId: strin
         <div className="hud hud-bc">
           {panel === "scenes" && !preparing && <ScenesPanel worldId={worldId} scene={scene} send={send} />}
           {panel === "tokens" && <TokensPanel worldId={worldId} scene={scene} me={me} tokens={state.tokens} selectedIds={selectedSet} onSelect={(id) => { setSelectedIds(new Set([id])); setPanel("details"); }} people={people} send={send} />}
+          {panel === "library" && <LibraryPanel worldId={worldId} scene={scene} tokens={state.tokens} send={send} />}
           <div className="hud-pill" role="toolbar" aria-label={t("ui.world.table.hud.dock")}>
             {!preparing && (
               <button type="button" className="hud-btn" aria-pressed={panel === "scenes"} data-tip={t("ui.world.table.hud.scenes")} aria-label={t("ui.world.table.hud.scenes")} onClick={() => { open("scenes"); }}>
@@ -244,6 +246,9 @@ export function TablePage({ worldId, prepareSceneId, onLeave }: { worldId: strin
             )}
             <button type="button" className="hud-btn" aria-pressed={panel === "tokens"} data-tip={t("ui.world.table.hud.tokens")} aria-label={t("ui.world.table.hud.tokens")} onClick={() => { open("tokens"); }}>
               <Icon name="token" />
+            </button>
+            <button type="button" className="hud-btn" aria-pressed={panel === "library"} data-tip={t("ui.world.table.hud.library")} aria-label={t("ui.world.table.hud.library")} onClick={() => { open("library"); }}>
+              <Icon name="library" />
             </button>
           </div>
         </div>

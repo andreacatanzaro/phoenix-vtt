@@ -17,6 +17,7 @@ import { refreshScene } from "./table/commands";
 import { createCryptoRng } from "./table/crypto-rng";
 import { reclaimImages, startImageSweep } from "./image-gc";
 import { TableHub } from "./table/hub";
+import { tokenLibraryRoutes } from "./routes/token-library";
 import { worldStructureRoutes } from "./routes/world-structure";
 import { worldRoutes } from "./routes/worlds";
 
@@ -73,6 +74,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   worldRoutes(app, db);
   worldStructureRoutes(app, db, hub, reclaim);
   memberRoutes(app, db, hub);
+  tokenLibraryRoutes(app, db, reclaim);
   gameSessionRoutes(app, db, now, hub);
   const tableDeps = { db, hub, rng: deps.rng ?? createCryptoRng(), now };
   imageRoutes(app, db, deps.imageStore, now, async (worldId, sceneId) => {

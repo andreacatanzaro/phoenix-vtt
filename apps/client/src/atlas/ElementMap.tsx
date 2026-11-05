@@ -25,6 +25,7 @@ function locate(tree: WorldTree, id: string): Located {
 type Action =
   | { kind: "new-area"; regionId: string }
   | { kind: "redraw-area"; areaId: string }
+  | { kind: "edit-area"; areaId: string }
   | { kind: "new-place"; areaId: string }
   | { kind: "move-place"; placeId: string }
   | { kind: "new-scene"; placeId: string }
@@ -77,6 +78,8 @@ export function ElementMap({ worldId, isDm, tree, links, collection, id, onPick,
   const [pending, setPending] = useState<{ action: Action; polygon?: MapPoint[]; pin?: MapPoint } | null>(null);
   const [name, setName] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  // A change is being saved: the points of a shape are not dragged meanwhile, or a second edit would restore the first one.
+  const [saving, setSaving] = useState(false);
   // The exit picked on the map, to be taken away.
   const [arrowId, setArrowId] = useState<string | null>(null);
   const found = locate(tree, id);
@@ -113,12 +116,14 @@ export function ElementMap({ worldId, isDm, tree, links, collection, id, onPick,
     }
     if (collection === "areas" && region !== null && area !== null) {
       const placed = area.polygon != null;
+      const editShape: Choice[] = placed ? [{ action: { kind: "edit-area", areaId: area.id }, label: t("ui.world.atlas.edit-shape") }] : [];
       const addPlace: Choice[] = placed ? [{ action: { kind: "new-place", areaId: area.id }, label: t("ui.world.atlas.add-place") }] : [];
       return [{
         key: "area", title: t("ui.world.atlas.region-map"), mapImageId: region.mapImageId ?? null, owner: regionOwner(region), ownsMap: false,
         shapes: areaShapes(area.id), pins: placePins([area], null), arrows: [],
         choices: [
           { action: { kind: "redraw-area", areaId: area.id }, label: t(placed ? "ui.world.atlas.redraw-area" : "ui.world.atlas.place-now") },
+          ...editShape,
           ...addPlace,
         ],
         inside: area.polygon ?? undefined,
@@ -158,12 +163,17 @@ export function ElementMap({ worldId, isDm, tree, links, collection, id, onPick,
 
   const finish = async (work: () => Promise<unknown>): Promise<void> => {
     setNote(null);
-    const ok = await run(async () => { await work(); });
-    if (ok) {
-      setActive(null);
-      setPending(null);
-      setName("");
-      await onChange();
+    setSaving(true);
+    try {
+      if (await run(async () => { await work(); })) {
+        setActive(null);
+        setPending(null);
+        setName("");
+        // Still locked while the tree is read again: until then the shape on the screen is the old one.
+        await onChange();
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -221,11 +231,12 @@ export function ElementMap({ worldId, isDm, tree, links, collection, id, onPick,
     const mine = section.choices.find((c) => same(active, c.action));
     if (mine === undefined) return { kind: "view" };
     if (mine.action.kind === "new-exit") return { kind: "link" };
+    if (mine.action.kind === "edit-area") return { kind: "edit", shapeId: mine.action.areaId };
     if (mine.action.kind === "new-area" || mine.action.kind === "redraw-area") return { kind: "draw" };
     return { kind: "pin", inside: mine.action.kind === "new-scene" || mine.action.kind === "move-scene" ? undefined : section.inside };
   };
 
-  const hintFor = (action: Action): string => (action.kind === "new-area" || action.kind === "redraw-area" ? t("ui.world.atlas.draw-hint") : action.kind === "new-exit" ? t("ui.world.atlas.exit-hint") : t("ui.world.atlas.pin-hint"));
+  const hintFor = (action: Action): string => (action.kind === "new-area" || action.kind === "redraw-area" ? t("ui.world.atlas.draw-hint") : action.kind === "new-exit" ? t("ui.world.atlas.exit-hint") : action.kind === "edit-area" ? t("ui.world.atlas.edit-hint") : t("ui.world.atlas.pin-hint"));
   const arrowPicked = sections.flatMap((s) => s.arrows).find((a) => a.id === arrowId);
 
   if (sections.length === 0) return null;
@@ -251,13 +262,16 @@ export function ElementMap({ worldId, isDm, tree, links, collection, id, onPick,
                   shapes={section.shapes}
                   pins={section.pins}
                   arrows={section.arrows}
+                  ghost={pending !== null && section.choices.some((c) => same(pending.action, c.action)) ? { polygon: pending.polygon, pin: pending.pin } : undefined}
                   mode={mode}
+                  locked={saving}
                   movable={isDm}
                   onShape={onPick}
                   onPin={onPick}
                   onDrawn={drawn}
                   onPlaced={placed}
                   onRefused={() => { setNote(t("ui.world.atlas.pin-outside")); }}
+                  onShapeEdited={(areaId, polygon) => { void finish(() => api.updateElement(worldId, "areas", areaId, { polygon })); }}
                   onArrow={(picked) => { setArrowId(arrowId === picked ? null : picked); }}
                   onLink={linked}
                   onMovePin={(pinId, at) => { const pin = section.pins.find((p) => p.id === pinId); if (pin !== undefined) moved(pin, at); }}

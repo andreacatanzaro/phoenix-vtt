@@ -39,10 +39,10 @@ function mappedTree(): WorldTree {
 const bare: WorldTree = { regions: [{ ...el("r1", "Regno", { mapImageId: null }), areas: [] }] };
 
 type Routes = Record<string, { status: number; body?: unknown }[]>;
-function setup(tree: WorldTree, collection: "regions" | "areas" | "places" | "scenes", id: string, over: { isDm?: boolean; routes?: Routes; links?: SceneLinkView[] } = {}) {
+function setup(tree: WorldTree, collection: "regions" | "areas" | "places" | "scenes", id: string, over: { isDm?: boolean; routes?: Routes; links?: SceneLinkView[]; onChange?: () => Promise<void> } = {}) {
   const server = fakeServer({ ...(over.routes ?? {}) });
   const onPick = vi.fn();
-  const onChange = vi.fn(() => Promise.resolve());
+  const onChange = vi.fn(over.onChange ?? (() => Promise.resolve()));
   render(<ElementMap worldId="w1" isDm={over.isDm ?? true} tree={tree} links={over.links ?? []} collection={collection} id={id} onPick={onPick} onChange={onChange} />);
   return { server, onPick, onChange };
 }
@@ -95,6 +95,27 @@ describe("the map of a region", () => {
     expect(onChange).toHaveBeenCalled();
   });
 
+  it("the shape that was drawn stays on the map while it waits for a name, and goes when it is given up or made", async () => {
+    setup(mappedTree(), "regions", "r1", { routes: { "POST /api/worlds/w1/areas": [created("a9")] } });
+    fireEvent.click(buttonNamed("Disegna un'area"));
+    clickAt(140, 70);
+    clickAt(340, 70);
+    clickAt(340, 190);
+    expect(document.querySelector(".atlas-ghost")).toBeNull();
+    fireEvent.click(buttonNamed("Chiudi la forma"));
+    expect(document.querySelector(".atlas-ghost")).not.toBeNull();
+    fireEvent.click(buttonNamed("Annulla"));
+    expect(document.querySelector(".atlas-ghost")).toBeNull();
+    fireEvent.click(buttonNamed("Disegna un'area"));
+    clickAt(140, 70);
+    clickAt(340, 70);
+    clickAt(340, 190);
+    fireEvent.click(buttonNamed("Chiudi la forma"));
+    fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Paludi" } });
+    fireEvent.click(buttonNamed("Crea"));
+    await waitFor(() => { expect(document.querySelector(".atlas-ghost")).toBeNull(); });
+  });
+
   it("taking the map away asks the server, and a refusal is said", async () => {
     setup(mappedTree(), "regions", "r1", { routes: { "PATCH /api/worlds/w1/regions/r1": [{ status: 409, body: { error: "errors.world.map-in-use" } }] } });
     fireEvent.click(screen.getByRole("button", { name: "Togli la mappa: Regno" }));
@@ -133,6 +154,83 @@ describe("the map of an area", () => {
     expect(screen.getByRole("button", { name: "Locanda" })).toBeTruthy();
   });
 
+  it("has its points moved: they are dragged on the map and the new shape is saved", async () => {
+    const { server } = setup(mappedTree(), "areas", "a1", { routes: { "PATCH /api/worlds/w1/areas/a1": [element("a1")] } });
+    fireEvent.click(buttonNamed("Sposta i punti"));
+    expect(screen.getByRole("status").textContent).toBe("Trascina i punti per cambiare la forma dell'area.");
+    const point = screen.getByRole("button", { name: "Punto 1 di Foresta" });
+    const fire = (type: string, x: number, y: number): void => { point.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true })); };
+    fire("pointerdown", 140, 70);
+    fire("pointermove", 220, 130);
+    fire("pointerup", 220, 130);
+    await waitFor(() => { expect(server.bodies["PATCH /api/worlds/w1/areas/a1"]).toEqual([{ polygon: [{ x: 0.3, y: 0.4 }, square[1], square[2], square[3]] }]); });
+  });
+
+  it("a second point dragged while the first change is still being saved is not taken, so it cannot bring the first back", async () => {
+    const { onChange } = setup(mappedTree(), "areas", "a1");
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_path: string, init?: RequestInit) => {
+      if (typeof init?.body === "string") bodies.push(JSON.parse(init.body));
+      await gate;
+      return new Response(JSON.stringify({ element: { id: "a1", name: "X", description: "", revealed: false } }), { status: 200 });
+    }));
+    fireEvent.click(buttonNamed("Sposta i punti"));
+    const drag = (name: string, from: [number, number], to: [number, number]): void => {
+      const point = screen.getByRole("button", { name });
+      const fire = (type: string, x: number, y: number): void => { point.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true })); };
+      fire("pointerdown", from[0], from[1]);
+      fire("pointermove", to[0], to[1]);
+      fire("pointerup", to[0], to[1]);
+    };
+    drag("Punto 1 di Foresta", [140, 70], [220, 130]);
+    await waitFor(() => { expect(bodies).toHaveLength(1); });
+    expect(buttonNamed("Punto 2 di Foresta").disabled).toBe(true);
+    drag("Punto 2 di Foresta", [300, 70], [320, 90]);
+    expect(bodies).toHaveLength(1);
+    release();
+    await waitFor(() => { expect(onChange).toHaveBeenCalled(); });
+    expect(bodies).toHaveLength(1);
+  });
+
+  it("the points stay locked until the tree has been read again, so a second edit is not built on the old shape", async () => {
+    let refreshed: () => void = () => undefined;
+    const reading = new Promise<void>((resolve) => { refreshed = resolve; });
+    const { onChange } = setup(mappedTree(), "areas", "a1", { routes: { "PATCH /api/worlds/w1/areas/a1": [element("a1")] }, onChange: () => reading });
+    fireEvent.click(buttonNamed("Sposta i punti"));
+    const point = screen.getByRole("button", { name: "Punto 1 di Foresta" });
+    const fire = (type: string, x: number, y: number): void => { point.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true })); };
+    fire("pointerdown", 140, 70);
+    fire("pointermove", 220, 130);
+    fire("pointerup", 220, 130);
+    // The change is saved, and the tree is being read again.
+    await waitFor(() => { expect(onChange).toHaveBeenCalled(); });
+    fireEvent.click(buttonNamed("Sposta i punti"));
+    expect(buttonNamed("Punto 2 di Foresta").disabled).toBe(true);
+    refreshed();
+    await waitFor(() => { expect(buttonNamed("Punto 2 di Foresta").disabled).toBe(false); });
+  });
+
+  it("a shape that would leave a place outside is refused, and the refusal is said", async () => {
+    setup(mappedTree(), "areas", "a1", { routes: { "PATCH /api/worlds/w1/areas/a1": [{ status: 409, body: { error: "errors.world.pins-outside" } }] } });
+    fireEvent.click(buttonNamed("Sposta i punti"));
+    const point = screen.getByRole("button", { name: "Punto 3 di Foresta" });
+    const fire = (type: string, x: number, y: number): void => { point.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true })); };
+    fire("pointerdown", 300, 150);
+    fire("pointermove", 120, 70);
+    fire("pointerup", 120, 70);
+    expect((await screen.findByRole("alert")).textContent).toBe("La nuova forma lascerebbe fuori dei luoghi che ci sono dentro: spostali prima.");
+  });
+
+  it("an area that is not on the map has no points to move, and a player has no way to move them", () => {
+    setup(mappedTree(), "areas", "a2");
+    expect(screen.queryByRole("button", { name: "Sposta i punti" })).toBeNull();
+    cleanup();
+    setup(mappedTree(), "areas", "a1", { isDm: false });
+    expect(screen.queryByRole("button", { name: "Sposta i punti" })).toBeNull();
+  });
+
   it("is redrawn", async () => {
     const { server } = setup(mappedTree(), "areas", "a1", { routes: { "PATCH /api/worlds/w1/areas/a1": [element("a1")] } });
     fireEvent.click(buttonNamed("Ridisegna l'area"));
@@ -141,6 +239,16 @@ describe("the map of an area", () => {
     clickAt(340, 190);
     fireEvent.click(buttonNamed("Chiudi la forma"));
     await waitFor(() => { expect(server.bodies["PATCH /api/worlds/w1/areas/a1"]).toEqual([{ polygon: [{ x: 0.1, y: 0.1 }, { x: 0.6, y: 0.1 }, { x: 0.6, y: 0.7 }] }]); });
+  });
+
+  it("a pin placed for a new place stays on the map while it waits for a name, and goes when that is given up", () => {
+    setup(mappedTree(), "areas", "a1");
+    fireEvent.click(buttonNamed("Aggiungi un luogo in quest'area"));
+    expect(screen.queryByTestId("atlas-ghost-pin")).toBeNull();
+    clickAt(200, 100);
+    expect(screen.getByTestId("atlas-ghost-pin").getAttribute("style")).toContain("left: 25%");
+    fireEvent.click(buttonNamed("Annulla"));
+    expect(screen.queryByTestId("atlas-ghost-pin")).toBeNull();
   });
 
   it("gets a place: the pin must be inside, a click outside is refused, inside it asks the name and creates it", async () => {

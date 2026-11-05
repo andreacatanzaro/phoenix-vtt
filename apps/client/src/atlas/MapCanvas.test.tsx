@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MAX_POLYGON_POINTS } from "@phoenix/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buttonNamed } from "../test-helpers";
@@ -16,7 +16,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 const square = [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }];
 
 function setup(over: Partial<MapCanvasProps> = {}) {
-  const handlers = { onShape: vi.fn(), onPin: vi.fn(), onDrawn: vi.fn(), onPlaced: vi.fn(), onRefused: vi.fn(), onMovePin: vi.fn(), onArrow: vi.fn(), onLink: vi.fn() };
+  const handlers = { onShape: vi.fn(), onPin: vi.fn(), onDrawn: vi.fn(), onPlaced: vi.fn(), onRefused: vi.fn(), onMovePin: vi.fn(), onArrow: vi.fn(), onLink: vi.fn(), onShapeEdited: vi.fn() };
   render(<MapCanvas src="/img/1" alt="Mappa" mode={{ kind: "view" }} {...handlers} {...over} />);
   const surface = screen.getByTestId("atlas-map");
   return { ...handlers, surface };
@@ -169,6 +169,98 @@ describe("MapCanvas arrows (the exits between scenes)", () => {
     Object.defineProperty(picture, "naturalHeight", { value: 1000, configurable: true });
     fireEvent.load(picture);
     expect(document.querySelector("svg")?.getAttribute("viewBox")).toBe("0 0 2 1");
+  });
+});
+
+describe("MapCanvas showing what is about to be made", () => {
+  it("shows a shape and a pin that wait for a name, without being something to pick", () => {
+    const { onShape, onPin } = setup({ ghost: { polygon: square, pin: { x: 0.25, y: 0.75 } } });
+    expect(document.querySelector(".atlas-ghost")).not.toBeNull();
+    const pin = screen.getByTestId("atlas-ghost-pin");
+    expect(pin.getAttribute("style")).toContain("left: 25%");
+    expect(pin.getAttribute("style")).toContain("top: 75%");
+    expect(screen.queryByRole("button", { name: /Nuovo/ })).toBeNull();
+    fireEvent.click(pin);
+    expect(onShape).not.toHaveBeenCalled();
+    expect(onPin).not.toHaveBeenCalled();
+  });
+
+  it("shows nothing when nothing waits", () => {
+    setup({});
+    expect(document.querySelector(".atlas-ghost")).toBeNull();
+    expect(screen.queryByTestId("atlas-ghost-pin")).toBeNull();
+  });
+});
+
+describe("MapCanvas moving the points of a shape", () => {
+  const shapes = [{ id: "a1", label: "Foresta", polygon: square, selected: true }];
+  const handle = (n: number): HTMLElement => screen.getByRole("button", { name: `Punto ${String(n)} di Foresta` });
+  const fire = (target: HTMLElement, type: string, x: number, y: number): void => { target.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true })); };
+
+  it("offers a handle on each point of the shape being edited, and none otherwise", () => {
+    setup({ shapes, mode: { kind: "edit", shapeId: "a1" } });
+    expect([1, 2, 3, 4].map((n) => handle(n).getAttribute("style"))).toEqual(["left: 10%; top: 10%;", "left: 50%; top: 10%;", "left: 50%; top: 50%;", "left: 10%; top: 50%;"]);
+    cleanup();
+    setup({ shapes });
+    expect(screen.queryByRole("button", { name: "Punto 1 di Foresta" })).toBeNull();
+  });
+
+  it("a point dragged to another place gives the new shape, with the other points where they were", () => {
+    const { onShapeEdited } = setup({ shapes, mode: { kind: "edit", shapeId: "a1" } });
+    // The first point is at (140, 70) on the screen; it is taken to (220, 130).
+    fire(handle(1), "pointerdown", 140, 70);
+    fire(handle(1), "pointermove", 220, 130);
+    fire(handle(1), "pointerup", 220, 130);
+    expect(onShapeEdited).toHaveBeenCalledWith("a1", [{ x: 0.3, y: 0.4 }, square[1], square[2], square[3]]);
+  });
+
+  it("a touch that hardly moves changes nothing", () => {
+    const { onShapeEdited } = setup({ shapes, mode: { kind: "edit", shapeId: "a1" } });
+    fire(handle(2), "pointerdown", 300, 70);
+    fire(handle(2), "pointerup", 301, 71);
+    expect(onShapeEdited).not.toHaveBeenCalled();
+  });
+
+  it("a point cannot be taken off the picture", () => {
+    const { onShapeEdited } = setup({ shapes, mode: { kind: "edit", shapeId: "a1" } });
+    fire(handle(3), "pointerdown", 300, 150);
+    fire(handle(3), "pointermove", 900, 900);
+    fire(handle(3), "pointerup", 900, 900);
+    expect(onShapeEdited).toHaveBeenCalledWith("a1", [square[0], square[1], { x: 1, y: 1 }, square[3]]);
+  });
+
+  it("shows the shape as it is dragged", async () => {
+    setup({ shapes, mode: { kind: "edit", shapeId: "a1" } });
+    fire(handle(1), "pointerdown", 140, 70);
+    fire(handle(1), "pointermove", 220, 130);
+    await waitFor(() => { expect(screen.getByRole("button", { name: "Foresta" }).getAttribute("points")).toBe("0.3,0.4 0.5,0.1 0.5,0.5 0.1,0.5"); });
+  });
+
+  it("while editing, a click on the picture or on a point draws nothing, so the next drawing does not begin with stray points", () => {
+    const { surface, onDrawn, onPlaced } = setup({ shapes, mode: { kind: "edit", shapeId: "a1" } });
+    fireEvent.click(surface, { clientX: 200, clientY: 100 });
+    fireEvent.click(handle(1), { clientX: 140, clientY: 70 });
+    expect(onDrawn).not.toHaveBeenCalled();
+    expect(onPlaced).not.toHaveBeenCalled();
+    const first = render(<MapCanvas src="/img/1" alt="Mappa" shapes={shapes} mode={{ kind: "edit", shapeId: "a1" }} />);
+    fireEvent.click(screen.getAllByTestId("atlas-map")[1] ?? surface, { clientX: 200, clientY: 100 });
+    first.rerender(<MapCanvas src="/img/1" alt="Mappa" shapes={shapes} mode={{ kind: "draw" }} />);
+    expect(screen.queryAllByTestId("atlas-draft-point")).toHaveLength(0);
+  });
+
+  it("a point cannot be dragged while the last change is being saved, and says so by being off", () => {
+    const { onShapeEdited } = setup({ shapes, mode: { kind: "edit", shapeId: "a1" }, locked: true });
+    expect(buttonNamed("Punto 1 di Foresta").disabled).toBe(true);
+    fire(handle(1), "pointerdown", 140, 70);
+    fire(handle(1), "pointermove", 220, 130);
+    fire(handle(1), "pointerup", 220, 130);
+    expect(onShapeEdited).not.toHaveBeenCalled();
+  });
+
+  it("while editing, the areas are not picked", () => {
+    const { onShape } = setup({ shapes, mode: { kind: "edit", shapeId: "a1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Foresta" }));
+    expect(onShape).not.toHaveBeenCalled();
   });
 });
 

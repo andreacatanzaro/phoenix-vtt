@@ -485,6 +485,44 @@ describe("writing a text", () => {
   });
 });
 
+describe("the library of tokens", () => {
+  const withLibrary = (): void => {
+    fakeServer({ ...world, "GET /api/worlds/w1/token-library": [{ status: 200, body: { tokens: [{ id: "e1", name: "Goblin", color: "green", size: 1, imageId: null }] } }] });
+  };
+
+  it("the DM has it in the bar at the bottom, and a token put from it goes to the table", async () => {
+    withLibrary();
+    sit("dm");
+    fireEvent.click(screen.getByRole("button", { name: "Libreria di token" }));
+    expect(screen.getByRole("region", { name: "Libreria di token" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Aggiungi Goblin alla scena" }));
+    expect(lastSent()).toMatchObject({ type: "token.add", kind: "token", label: "Goblin", color: "green", size: 1 });
+  });
+
+  it("is there in the preparation of a scene too", async () => {
+    withLibrary();
+    render(<TablePage worldId="w1" prepareSceneId="s1" onLeave={vi.fn()} />);
+    open();
+    receive(snapshot("dm", { mode: "prepare", session: { id: "prepare:s1", title: "Sala comune" }, messages: [] }));
+    fireEvent.click(screen.getByRole("button", { name: "Libreria di token" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Aggiungi Goblin alla scena" }));
+    expect(lastSent()).toMatchObject({ type: "token.add", label: "Goblin" });
+  });
+
+  it("is the DM's alone: a player has no way to it", () => {
+    sit("player");
+    expect(screen.queryByRole("button", { name: "Libreria di token" })).toBeNull();
+  });
+
+  it("opens one panel at a time, like the others", () => {
+    withLibrary();
+    sit("dm");
+    fireEvent.click(screen.getByRole("button", { name: "Libreria di token" }));
+    fireEvent.click(screen.getByRole("button", { name: "Token" }));
+    expect(screen.queryByRole("region", { name: "Libreria di token" })).toBeNull();
+  });
+});
+
 describe("preparing a scene", () => {
   const prepSnapshot = (over: Partial<Extract<TableEvent, { type: "snapshot" }>> = {}): TableEvent => snapshot("dm", { mode: "prepare", session: { id: "prepare:s1", title: "Sala comune" }, messages: [], ...over });
   const prepare = (): void => {
