@@ -356,3 +356,29 @@ kbd { display: inline-block; min-width: 1.5rem; padding: 0.05rem 0.4rem; text-al
   .tabs { justify-content: flex-start; }
   .world-head h1 { font-size: var(--step-2); }
 }
+
+/* The maps of the atlas: a picture with the areas as shapes and the places and scenes as pins, all placed by fractions. */
+.atlas-map { position: relative; width: fit-content; max-width: 100%; line-height: 0; border: 1px solid var(--traccia); border-radius: 0.5rem; overflow: hidden; background: var(--notte); user-select: none; }
+.atlas-map img { display: block; width: auto; height: auto; max-width: 100%; max-height: 70vh; pointer-events: none; }
+.atlas-map.placing { cursor: crosshair; }
+.atlas-shapes { position: absolute; inset: 0; width: 100%; height: 100%; }
+.atlas-area { fill: rgba(232, 165, 48, 0.12); stroke: var(--oro); stroke-width: 2; vector-effect: non-scaling-stroke; cursor: pointer; outline: none; }
+.atlas-area:hover, .atlas-area:focus-visible { fill: rgba(232, 165, 48, 0.28); }
+.atlas-area.selected { fill: rgba(232, 165, 48, 0.32); stroke-width: 3; }
+.atlas-map.placing .atlas-area, .atlas-map.placing .atlas-pin, .atlas-map.placing .atlas-arrow { pointer-events: none; }
+.atlas-map.linking .atlas-area, .atlas-map.linking .atlas-arrow { pointer-events: none; }
+.atlas-map.linking .atlas-pin { cursor: crosshair; }
+.atlas-arrow { cursor: pointer; outline: none; }
+.atlas-arrow-hit { stroke: transparent; stroke-width: 12; vector-effect: non-scaling-stroke; pointer-events: stroke; }
+.atlas-arrow-line { stroke: var(--osso); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-opacity: 0.8; pointer-events: none; }
+.atlas-arrow-head { fill: var(--osso); fill-opacity: 0.85; pointer-events: none; }
+.atlas-arrow:hover .atlas-arrow-line, .atlas-arrow:focus-visible .atlas-arrow-line, .atlas-arrow.selected .atlas-arrow-line { stroke: var(--oro); stroke-opacity: 1; stroke-width: 3; }
+.atlas-arrow:hover .atlas-arrow-head, .atlas-arrow:focus-visible .atlas-arrow-head, .atlas-arrow.selected .atlas-arrow-head { fill: var(--oro); fill-opacity: 1; }
+.atlas-draft { fill: rgba(70, 181, 143, 0.2); stroke: var(--verderame); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.atlas-draft-point { position: absolute; width: 0.7rem; height: 0.7rem; margin: -0.35rem 0 0 -0.35rem; border-radius: 50%; background: var(--verderame); pointer-events: none; }
+.atlas-pin { position: absolute; width: 1.15rem; height: 1.15rem; margin: -0.575rem 0 0 -0.575rem; padding: 0; border-radius: 50%; border: 2px solid var(--notte); background: var(--oro); cursor: pointer; touch-action: none; }
+.atlas-pin.scene { background: var(--verderame); }
+.atlas-pin:hover, .atlas-pin:focus-visible, .atlas-pin.selected { box-shadow: 0 0 0 3px rgba(232, 165, 48, 0.55); z-index: 2; }
+.atlas-pin-name { position: absolute; left: 50%; top: calc(100% + 0.25rem); transform: translateX(-50%); padding: 0.1rem 0.45rem; border-radius: 0.4rem; background: rgba(21, 26, 33, 0.94); border: 1px solid var(--traccia); color: var(--osso); font-size: var(--step--1); line-height: 1.3; white-space: nowrap; pointer-events: none; opacity: 0; }
+.atlas-pin:hover .atlas-pin-name, .atlas-pin:focus-visible .atlas-pin-name, .atlas-pin.selected .atlas-pin-name { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) { .atlas-pin, .atlas-area { transition: box-shadow 120ms, fill 120ms; } }

@@ -45,7 +45,13 @@ export const sceneTableViewSchema = z.object({
 });
 export type SceneTableView = z.infer<typeof sceneTableViewSchema>;
 /** `inPlay`: this scene is the one being played in the running session (the setup read by the DM says so). */
-export const sceneTableResponseSchema = z.object({ scene: sceneTableViewSchema, inPlay: z.boolean().default(false) });
+export const sceneTableResponseSchema = z.object({
+  scene: sceneTableViewSchema,
+  inPlay: z.boolean().default(false),
+  /** Whether a session is running in this world, and which scene it is playing (the DM reads them with the setup). */
+  running: z.boolean().default(false),
+  currentSceneId: z.string().nullable().default(null),
+});
 
 /** Token colors, by name; the client maps each to the design palette. */
 export const TOKEN_COLORS = ["gold", "green", "red", "blue", "violet", "grey", "white", "black"] as const;

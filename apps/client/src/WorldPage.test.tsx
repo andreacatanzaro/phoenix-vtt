@@ -22,8 +22,10 @@ const fullTree = {
     },
   ],
 };
+// A player is shown only what is on a map: everything here is placed.
+const shape = [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.9 }];
 const playerTree = {
-  regions: [{ ...el("r1", "Regno"), areas: [{ ...el("a1", "Foresta"), places: [{ ...el("p1", "Locanda", { description: "Una locanda accogliente" }), scenes: [el("s1", "Sala")] }] }] }],
+  regions: [{ ...el("r1", "Regno"), areas: [{ ...el("a1", "Foresta", { polygon: shape }), places: [{ ...el("p1", "Locanda", { description: "Una locanda accogliente", pin: { x: 0.5, y: 0.3 } }), scenes: [el("s1", "Sala", { pin: { x: 0.5, y: 0.5 } })] }] }] }],
 };
 
 /** The label of an entry of the tree, or null when it is not there. */

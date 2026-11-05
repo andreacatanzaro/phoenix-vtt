@@ -13,23 +13,59 @@ export const collectionSchema = z.enum(ELEMENT_COLLECTIONS);
 const nameSchema = z.string().trim().min(1).max(ELEMENT_NAME_MAX_LENGTH);
 const textSchema = z.string().max(ELEMENT_TEXT_MAX_LENGTH);
 
-/** `parentId` is the region of an area, the area of a place, the place of a scene; regions have none. */
+/** A place on a map, as a fraction of the width and height of the picture (0 to 1). */
+export const mapPointSchema = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) });
+export const MIN_POLYGON_POINTS = 3;
+export const MAX_POLYGON_POINTS = 64;
+/** The shape of an area on the map of its region. */
+export const polygonSchema = z.array(mapPointSchema).min(MIN_POLYGON_POINTS).max(MAX_POLYGON_POINTS);
+
+/**
+ * `parentId` is the region of an area, the area of a place, the place of a scene; regions have none. An area is born with
+ * its `polygon` on the map of the region, a place with its `pin` inside the area, a scene with its `pin` on the map of the
+ * place. Without it the element exists but is not on any map yet (it waits in the list of what is to be placed).
+ */
 export const createElementSchema = z.object({
   name: nameSchema,
   description: textSchema.default(""),
   dmNotes: textSchema.default(""),
   parentId: z.uuid().optional(),
+  polygon: polygonSchema.optional(),
+  pin: mapPointSchema.optional(),
 });
 export type CreateElementInput = z.infer<typeof createElementSchema>;
 
 export const updateElementSchema = z
-  .object({ name: nameSchema, description: textSchema, dmNotes: textSchema, revealed: z.boolean() })
+  .object({
+    name: nameSchema,
+    description: textSchema,
+    dmNotes: textSchema,
+    revealed: z.boolean(),
+    /** The map of a region or of a place; null takes it away. */
+    mapImageId: z.uuid().nullable(),
+    /** The shape of an area on the map of its region; null takes it off the map. */
+    polygon: polygonSchema.nullable(),
+    /** The pin of a place (inside its area) or of a scene (on the map of its place); null takes it off the map. */
+    pin: mapPointSchema.nullable(),
+  })
   .partial()
   .refine((v) => Object.keys(v).length > 0);
 export type UpdateElementInput = z.infer<typeof updateElementSchema>;
 
-/** `dmNotes` is present only in what the DM receives. */
-const elementBase = { id: z.string(), name: z.string(), description: z.string(), revealed: z.boolean(), dmNotes: z.string().optional() };
+/**
+ * `dmNotes` is present only in what the DM receives. The placement is what the element has on the maps of the atlas: the
+ * map of a region or of a place, the shape of an area, the pin of a place or of a scene (null: not placed yet).
+ */
+const elementBase = {
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  revealed: z.boolean(),
+  dmNotes: z.string().optional(),
+  mapImageId: z.string().nullable().optional(),
+  polygon: polygonSchema.nullable().optional(),
+  pin: mapPointSchema.nullable().optional(),
+};
 export const sceneViewSchema = z.object(elementBase);
 export const placeViewSchema = z.object({ ...elementBase, scenes: z.array(sceneViewSchema) });
 export const areaViewSchema = z.object({ ...elementBase, places: z.array(placeViewSchema) });

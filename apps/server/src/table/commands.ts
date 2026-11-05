@@ -159,6 +159,57 @@ export async function tokenCommand(deps: TableDeps, ctx: TokenRoom, viewer: View
     }  }
 }
 
+/** Opens a scene at the table: the session shows it from now on, and everyone is told. The DM's, from the table or the atlas. */
+export async function openSceneAtTable(deps: TableDeps, session: SessionRow, sceneId: string): Promise<void> {
+  const { db } = deps;
+  const scene = await loadScene(db, session.worldId, sceneId);
+  if (scene === null) return refuse("table.bad-target");
+  await db.update(gameSessions).set({ currentSceneId: scene.id }).where(eq(gameSessions.id, session.id));
+  closePreparation(deps, scene.id);
+  await say(deps, session, t("table.system.scene-opened", { scene: scene.name }));
+  await sendSnapshots(deps, session);
+}
+
+/**
+ * Takes the whole table to another scene along an exit of the scene being played: the tokens that travel arrive in the
+ * start zone of the new one, and the session shows it from now on.
+ */
+export async function travelAtTable(deps: TableDeps, session: SessionRow, toSceneId: string): Promise<void> {
+  const { db } = deps;
+  if (session.currentSceneId === null) return refuse("table.no-scene");
+  const from = session.currentSceneId;
+  const destination = await loadScene(db, session.worldId, toSceneId);
+  if (destination === null) return refuse("table.bad-target");
+  const exit = await db.select({ id: sceneLinks.id }).from(sceneLinks).where(and(eq(sceneLinks.worldId, session.worldId), eq(sceneLinks.fromSceneId, from), eq(sceneLinks.toSceneId, destination.id))).limit(1);
+  if (exit.length === 0) return refuse("table.no-exit");
+  await db.transaction(async (tx) => {
+    const arriving = await tx.select().from(tokens).where(eq(tokens.sceneId, destination.id));
+    const travelling = (await tx.select().from(tokens).where(and(eq(tokens.sceneId, from), eq(tokens.travels, true)))).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+    // Texts take no square of their own, so they do not keep a token out of a place.
+    const occupied = new Set(arriving.filter((r) => r.kind !== "text").flatMap(squaresOf));
+    const placed = placeInZone(destination.start, travelling.map((r) => ({ id: r.id, size: r.size })), occupied);
+    for (const spot of placed) await tx.update(tokens).set({ sceneId: destination.id, x: spot.x, y: spot.y }).where(eq(tokens.id, spot.id));
+    await tx.update(gameSessions).set({ currentSceneId: destination.id }).where(eq(gameSessions.id, session.id));
+  });
+  closePreparation(deps, destination.id);
+  await say(deps, session, t("table.system.scene-travel", { scene: destination.name }));
+  await sendSnapshots(deps, session);
+}
+
+/**
+ * Runs an action of the DM on the running session of a world from outside the table (the atlas): after every command
+ * already waiting at the table, on the session as it is then. Without a session that is running it is refused.
+ */
+export async function sceneAction(deps: TableDeps, worldId: string, action: (session: SessionRow) => Promise<void>): Promise<void> {
+  const running = await runningSession(deps.db, worldId);
+  if (running === null) return refuse("table.no-session");
+  await deps.hub.serial(running.id, async () => {
+    const session = await sessionById(deps.db, running.id);
+    if (session === null || session.status !== "running") return refuse("table.no-session");
+    await action(session);
+  });
+}
+
 /** The setup of a scene was saved: whoever is playing that scene gets it at once. */
 export async function refreshScene(deps: TableDeps, worldId: string, sceneId: string): Promise<void> {
   await refreshPreparation(deps, worldId, sceneId);
@@ -244,39 +295,13 @@ async function run(deps: TableDeps, sessionId: string, asked: Viewer, command: T
     case "token.remove":
       return tokenCommand(deps, { roomKey: session.id, worldId: session.worldId, sceneId: session.currentSceneId }, viewer, command);
 
-    case "scene.open": {
+    case "scene.open":
       requireDm(viewer);
-      const scene = await loadScene(db, session.worldId, command.sceneId);
-      if (scene === null) return refuse("table.bad-target");
-      await db.update(gameSessions).set({ currentSceneId: scene.id }).where(eq(gameSessions.id, session.id));
-      closePreparation(deps, scene.id);
-      await say(deps, session, t("table.system.scene-opened", { scene: scene.name }));
-      await sendSnapshots(deps, session);
-      return;
-    }
+      return openSceneAtTable(deps, session, command.sceneId);
 
-    case "scene.travel": {
+    case "scene.travel":
       requireDm(viewer);
-      if (session.currentSceneId === null) return refuse("table.no-scene");
-      const from = session.currentSceneId;
-      const destination = await loadScene(db, session.worldId, command.toSceneId);
-      if (destination === null) return refuse("table.bad-target");
-      const exit = await db.select({ id: sceneLinks.id }).from(sceneLinks).where(and(eq(sceneLinks.worldId, session.worldId), eq(sceneLinks.fromSceneId, from), eq(sceneLinks.toSceneId, destination.id))).limit(1);
-      if (exit.length === 0) return refuse("table.no-exit");
-      await db.transaction(async (tx) => {
-        const arriving = await tx.select().from(tokens).where(eq(tokens.sceneId, destination.id));
-        const travelling = (await tx.select().from(tokens).where(and(eq(tokens.sceneId, from), eq(tokens.travels, true)))).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
-        // Texts take no square of their own, so they do not keep a token out of a place.
-        const occupied = new Set(arriving.filter((r) => r.kind !== "text").flatMap(squaresOf));
-        const placed = placeInZone(destination.start, travelling.map((r) => ({ id: r.id, size: r.size })), occupied);
-        for (const spot of placed) await tx.update(tokens).set({ sceneId: destination.id, x: spot.x, y: spot.y }).where(eq(tokens.id, spot.id));
-        await tx.update(gameSessions).set({ currentSceneId: destination.id }).where(eq(gameSessions.id, session.id));
-      });
-      closePreparation(deps, destination.id);
-      await say(deps, session, t("table.system.scene-travel", { scene: destination.name }));
-      await sendSnapshots(deps, session);
-      return;
-    }
+      return travelAtTable(deps, session, command.toSceneId);
   }
 }
 

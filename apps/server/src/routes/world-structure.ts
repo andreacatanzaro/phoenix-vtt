@@ -8,7 +8,7 @@ import type { Database } from "../db/types";
 import { fail, isUniqueViolation, parseBody } from "../http";
 import type { TableHub } from "../table/hub";
 import { runningSession } from "../table/store";
-import { createElement, deleteElement, loadTree, updateElement, type DeleteResult } from "../world-tree";
+import { atlasQueueKey, createElement, deleteElement, loadTree, updateElement, type DeleteResult } from "../world-tree";
 
 const elementParams = z.object({ worldId: z.string(), collection: collectionSchema, id: z.uuid() });
 const collectionParams = z.object({ worldId: z.string(), collection: collectionSchema });
@@ -35,8 +35,11 @@ export function worldStructureRoutes(app: FastifyInstance, db: Database, hub: Ta
     if (access === null) return reply;
     const input = parseBody(request, reply, createElementSchema);
     if (input === null) return reply;
-    const created = await createElement(db, access.worldId, params.data.collection, input);
+    // What is placed is checked against what is around it, so the changes to the structure of a world go one at a time.
+    const created = await hub.serial(atlasQueueKey(access.worldId), () => createElement(db, access.worldId, params.data.collection, input));
     if (created === "parent-invalid") return fail(reply, 400, "world.parent-invalid");
+    if (created === "placement-invalid") return fail(reply, 400, "world.placement-invalid");
+    if (created === "placement-required") return fail(reply, 400, "world.placement-required");
     return reply.code(201).send(created);
   });
 
@@ -47,9 +50,16 @@ export function worldStructureRoutes(app: FastifyInstance, db: Database, hub: Ta
     if (access === null) return reply;
     const patch = parseBody(request, reply, updateElementSchema);
     if (patch === null) return reply;
-    const element = await updateElement(db, access.worldId, params.data.collection, params.data.id, patch);
-    if (element === null) return fail(reply, 404, "not-found");
-    return { element };
+    const result = await hub.serial(atlasQueueKey(access.worldId), () => updateElement(db, access.worldId, params.data.collection, params.data.id, patch));
+    if (result === "not-found") return fail(reply, 404, "not-found");
+    if (result === "invalid") return fail(reply, 400, "invalid");
+    if (result === "map-invalid") return fail(reply, 400, "world.map-invalid");
+    if (result === "placement-invalid") return fail(reply, 400, "world.placement-invalid");
+    if (result === "map-in-use") return fail(reply, 409, "world.map-in-use");
+    if (result === "pins-outside") return fail(reply, 409, "world.pins-outside");
+    // A map taken off a region or a place may be the last use of a picture.
+    if (patch.mapImageId !== undefined) await reclaim();
+    return { element: result.element };
   });
 
   app.delete("/api/worlds/:worldId/:collection/:id", async (request, reply) => {

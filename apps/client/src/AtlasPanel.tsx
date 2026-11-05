@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type SyntheticEvent } from "react";
 import { t, type ElementCollection, type SceneLinkView, type WorldTree } from "@phoenix/shared";
 import { api, ApiFailure } from "./api";
-import { CHILD_OF, branches, indexTree, sceneOptions, type Branch, type Entry } from "./tree";
+import { ElementMap } from "./atlas/ElementMap";
+import { ancestors, CHILD_OF, branches, indexTree, placedOnly, sceneOptions, unplaced, type Branch, type Entry, type Unplaced as UnplacedItem } from "./tree";
 import { useGuarded } from "./useGuarded";
 
 /** Structure of a world: the tree on the left, what is selected on the right. The DM edits; a player only reads. */
@@ -16,7 +17,8 @@ export function AtlasPanel({ worldId, isDm, onPrepare }: { worldId: string; isDm
   const reload = useCallback(async () => {
     await run(async () => {
       const [loaded, exits] = await Promise.all([api.tree(worldId), isDm ? api.sceneLinks(worldId) : Promise.resolve([])]);
-      setTree(loaded);
+      // A player walks the atlas on its maps: what is not on one yet is not shown. The DM sees everything.
+      setTree(isDm ? loaded : placedOnly(loaded));
       setLinks(exits);
     });
   }, [worldId, isDm]);
@@ -52,6 +54,7 @@ export function AtlasPanel({ worldId, isDm, onPrepare }: { worldId: string; isDm
             ))}
           </ul>
           {isDm && <div className="tree-add"><AddForm worldId={worldId} collection="regions" onDone={reload} onCreated={setSelected} /></div>}
+          {isDm && <UnplacedList items={unplaced(tree)} selectedId={shown?.node.id ?? null} onPick={setSelected} />}
         </nav>
         <div>
           {shown !== undefined ? (
@@ -66,6 +69,7 @@ export function AtlasPanel({ worldId, isDm, onPrepare }: { worldId: string; isDm
               onChange={reload}
               onGone={() => { setSelected(shown.parentId); }}
               onPrepare={onPrepare}
+              trail={ancestors(index, shown.node.id)}
             />
           ) : (
             <p className="muted">{t("ui.world.structure.pick")}</p>
@@ -105,12 +109,29 @@ function TreeItem({ branch, collection, isDm, selectedId, folded, onPick, onTogg
   );
 }
 
-function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, onPrepare }: { worldId: string; entry: Entry; isDm: boolean; links: SceneLinkView[]; tree: WorldTree; onPick: (id: string) => void; onChange: () => Promise<void>; onGone: () => void; onPrepare: (sceneId: string) => void }) {
+function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, onPrepare, trail }: { worldId: string; entry: Entry; trail: { id: string; name: string }[]; isDm: boolean; links: SceneLinkView[]; tree: WorldTree; onPick: (id: string) => void; onChange: () => Promise<void>; onGone: () => void; onPrepare: (sceneId: string) => void }) {
   const { error, run } = useGuarded();
   const { node, collection } = entry;
   // Preparing a scene that is in play was refused: said here, and the DM stays where they are.
   const [inPlay, setInPlay] = useState(false);
-  useEffect(() => { setInPlay(false); }, [node.id]);
+  // What the table is doing as far as this scene goes (a session running, which scene it plays), asked for a scene of the DM.
+  const [table, setTable] = useState<{ inPlay: boolean; running: boolean; currentSceneId: string | null } | null>(null);
+  // An action on the table that changes it for everyone asks first; what it said when it was done.
+  const [confirming, setConfirming] = useState<"open" | "bring" | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const sceneId = collection === "scenes" && isDm ? node.id : null;
+  useEffect(() => {
+    setInPlay(false);
+    setConfirming(null);
+    setDone(null);
+    setTable(null);
+    if (sceneId === null) return;
+    let live = true;
+    api.sceneContext(worldId, sceneId).then((context) => { if (live) setTable(context); }, () => undefined);
+    return () => { live = false; };
+  }, [node.id, sceneId, worldId]);
+  const canOpen = table !== null && table.running && !table.inPlay;
+  const canBring = canOpen && table.currentSceneId !== null && links.some((l) => l.fromSceneId === table.currentSceneId && l.toSceneId === node.id);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(node.name);
   const [description, setDescription] = useState(node.description);
@@ -118,6 +139,10 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, o
   // A scene that still has tokens is deleted only after the DM has said so, with the tokens.
   const [askAboutTokens, setAskAboutTokens] = useState(false);
   const child = CHILD_OF[collection];
+  // A map is not required. Where there is one to put the children on (a region or a place with a map, an area drawn on it)
+  // they are put on it; where there is none, they are made by name, as plain elements of the list.
+  const hasMapForChildren = collection === "areas" ? node.polygon != null : node.mapImageId != null;
+  const canAddByName = isDm && child !== null && collection !== "scenes" && !hasMapForChildren;
 
   async function remove(withTokens: boolean): Promise<void> {
     setAskAboutTokens(false);
@@ -148,11 +173,21 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, o
     }
   }
 
+  /** The DM confirmed: the table opens this scene, or takes everyone to it. */
+  const act = async (what: "open" | "bring"): Promise<void> => {
+    setConfirming(null);
+    setDone(null);
+    const ok = await run(() => (what === "open" ? api.openSceneAtTable(worldId, node.id) : api.travelToScene(worldId, node.id)));
+    if (!ok) return;
+    setDone(t(what === "open" ? "ui.world.structure.opened" : "ui.world.structure.brought"));
+    setTable(await api.sceneContext(worldId, node.id).catch(() => null));
+  };
+
   /** Asks first whether the scene is in play: the table would refuse it, and the screen it opens has no way out while it retries. */
   const prepare = async (): Promise<void> => {
     setInPlay(false);
     const answer = { busy: false };
-    const asked = await run(async () => { answer.busy = await api.sceneInPlay(worldId, node.id); });
+    const asked = await run(async () => { answer.busy = (await api.sceneContext(worldId, node.id)).inPlay; });
     if (!asked) return;
     if (answer.busy) setInPlay(true);
     else onPrepare(node.id);
@@ -161,12 +196,22 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, o
   return (
     <article className="detail framed">
       <header className="detail-head">
-        {entry.path.length > 1 && <p className="where">{entry.path.slice(0, -1).join(" › ")}</p>}
+        {trail.length > 0 && (
+          <nav className="where" aria-label={t("ui.world.structure.path")}>
+            {trail.map((step, i) => (
+              <span key={step.id}>
+                {i > 0 && " › "}
+                <button type="button" className="crumb" onClick={() => { onPick(step.id); }}>{step.name}</button>
+              </span>
+            ))}
+          </nav>
+        )}
         <p className="muted small">{t(`ui.world.kind.${collection}`)}</p>
         <h2>{node.name}</h2>
       </header>
 
       {node.description !== "" && <p className="flavor">{node.description}</p>}
+      {isDm && collection !== "regions" && (collection === "areas" ? node.polygon == null : node.pin == null) && <p className="notice">{t("ui.world.atlas.not-placed")}</p>}
       {isDm && node.dmNotes !== undefined && node.dmNotes !== "" && (
         <p className="dm-note">
           <span className="tag">{t("ui.world.structure.dm-only")}</span>
@@ -216,7 +261,9 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, o
         </form>
       )}
 
-      {(entry.children.length > 0 || (isDm && child !== null)) && child !== null && (
+      <ElementMap worldId={worldId} isDm={isDm} tree={tree} links={links} collection={collection} id={node.id} onPick={onPick} onChange={onChange} />
+
+      {(entry.children.length > 0 || canAddByName) && child !== null && (
         <section>
           <h3 className="section-title">{t("ui.world.structure.contains")}</h3>
           <ul className="child-list">
@@ -226,7 +273,7 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, o
               </li>
             ))}
           </ul>
-          {isDm && <div style={{ marginTop: "0.75rem" }}><AddForm worldId={worldId} collection={child} parentId={node.id} onDone={onChange} onCreated={onPick} /></div>}
+          {canAddByName && <div style={{ marginTop: "0.75rem" }}><AddForm worldId={worldId} collection={child} parentId={node.id} onDone={onChange} onCreated={onPick} /></div>}
         </section>
       )}
 
@@ -234,6 +281,23 @@ function Detail({ worldId, entry, isDm, links, tree, onPick, onChange, onGone, o
         <div>
           <button type="button" className="btn" onClick={() => { void prepare(); }}>{t("ui.world.structure.prepare")}</button>
           {inPlay && <p role="alert" className="notice">{t("errors.table.scene-in-play")}</p>}
+          {table?.inPlay === true && <p className="muted small">{t("ui.world.structure.being-played")}</p>}
+          {canOpen && (
+            <div className="row" style={{ marginTop: "0.5rem" }}>
+              <button type="button" className="btn quiet" onClick={() => { setConfirming("open"); }}>{t("ui.world.structure.open-table")}</button>
+              {canBring && <button type="button" className="btn quiet" onClick={() => { setConfirming("bring"); }}>{t("ui.world.structure.bring-all")}</button>}
+            </div>
+          )}
+          {confirming !== null && (
+            <div className="notice stack tight" role="alertdialog" aria-label={t(confirming === "open" ? "ui.world.structure.open-table" : "ui.world.structure.bring-all")}>
+              <p>{t(confirming === "open" ? "ui.world.structure.confirm-open" : "ui.world.structure.confirm-bring", { scene: node.name })}</p>
+              <div className="row">
+                <button type="button" className="btn small" onClick={() => { void act(confirming); }}>{t("ui.world.structure.confirm")}</button>
+                <button type="button" className="btn quiet small" onClick={() => { setConfirming(null); }}>{t("ui.world.structure.cancel")}</button>
+              </div>
+            </div>
+          )}
+          {done !== null && <p className="muted small" role="status">{done}</p>}
         </div>
       )}
       {isDm && collection === "scenes" && <Exits worldId={worldId} sceneId={node.id} links={links} tree={tree} onChange={onChange} />}
@@ -326,5 +390,25 @@ function AddForm({ worldId, collection, parentId, onDone, onCreated }: { worldId
       <button type="submit" className="btn quiet small">{t("ui.world.structure.add")}</button>
       {error !== null && <span role="alert" className="error small">{error}</span>}
     </form>
+  );
+}
+
+/** What was made before the maps, or was taken off one: it waits here to be placed on a map or deleted. */
+function UnplacedList({ items, selectedId, onPick }: { items: UnplacedItem[]; selectedId: string | null; onPick: (id: string) => void }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="tree-add stack tight" aria-label={t("ui.world.atlas.unplaced-title")}>
+      <h3 className="section-title">{t("ui.world.atlas.unplaced-title")}</h3>
+      <p className="muted small">{t("ui.world.atlas.unplaced-hint")}</p>
+      <ul className="child-list">
+        {items.map((item) => (
+          <li key={item.id}>
+            <button type="button" className="btn text" aria-current={selectedId === item.id} title={item.path} onClick={() => { onPick(item.id); }}>
+              {item.name} <span className="muted small">({t(`ui.world.kind.${item.collection}`)})</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

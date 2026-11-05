@@ -19,7 +19,8 @@ afterEach(() => {
 });
 
 const el = (id: string, name: string, extra: Record<string, unknown> = {}) => ({ id, name, description: "", revealed: true, ...extra });
-const tree = { regions: [{ ...el("r1", "Regno"), areas: [{ ...el("a1", "Foresta"), places: [{ ...el("p1", "Locanda"), scenes: [el("s1", "Sala"), el("s2", "Cantina")] }] }] }] };
+const shape = [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.9 }];
+const tree = { regions: [{ ...el("r1", "Regno"), areas: [{ ...el("a1", "Foresta", { polygon: shape }), places: [{ ...el("p1", "Locanda", { pin: { x: 0.5, y: 0.3 } }), scenes: [el("s1", "Sala", { pin: { x: 0.2, y: 0.2 } }), el("s2", "Cantina", { pin: { x: 0.6, y: 0.6 } })] }] }] }] };
 
 const setup = (inPlay: boolean) => ({ status: 200, body: { scene: { mapImageId: null, mapWidth: null, mapHeight: null, gridPx: 70, gridOffsetX: 0, gridOffsetY: 0, start: { x: 0, y: 0, w: 4, h: 4 } }, inPlay } });
 

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { MapPoint } from "@phoenix/shared";
 import { bigint, boolean, check, doublePrecision, jsonb, foreignKey, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 export const worldRole = pgEnum("world_role", ["dm", "player"]);
@@ -65,11 +66,12 @@ const element = () => ({
 });
 
 // Each child carries the world of its parent, and a composite key makes the database refuse a child in another world.
-export const regions = pgTable("regions", element(), (t) => [unique("regions_id_world").on(t.id, t.worldId), index("regions_world_idx").on(t.worldId)]);
+export const regions = pgTable("regions", { ...element(), mapImageId: uuid("map_image_id").references(() => images.id, { onDelete: "set null" }) }, (t) => [unique("regions_id_world").on(t.id, t.worldId), index("regions_world_idx").on(t.worldId)]);
 
 export const areas = pgTable(
   "areas",
-  { ...element(), regionId: uuid("region_id").notNull() },
+  // The shape on the map of the region, as fractions of its size; null until it is drawn (the area waits to be placed).
+  { ...element(), regionId: uuid("region_id").notNull(), polygon: jsonb("polygon").$type<MapPoint[]>() },
   (t) => [
     unique("areas_id_world").on(t.id, t.worldId),
     foreignKey({ columns: [t.regionId, t.worldId], foreignColumns: [regions.id, regions.worldId], name: "areas_region_fk" }),
@@ -79,7 +81,8 @@ export const areas = pgTable(
 
 export const places = pgTable(
   "places",
-  { ...element(), areaId: uuid("area_id").notNull() },
+  // The map of the place, and where its pin is on the map of the region (inside its area); null until placed.
+  { ...element(), areaId: uuid("area_id").notNull(), mapImageId: uuid("map_image_id").references(() => images.id, { onDelete: "set null" }), pin: jsonb("pin").$type<MapPoint>() },
   (t) => [
     unique("places_id_world").on(t.id, t.worldId),
     foreignKey({ columns: [t.areaId, t.worldId], foreignColumns: [areas.id, areas.worldId], name: "places_area_fk" }),
@@ -108,6 +111,8 @@ export const scenes = pgTable(
   "scenes",
   {
     ...element(),
+    // Where the scene is pinned on the map of its place, as fractions of its size; null until placed.
+    pin: jsonb("pin").$type<MapPoint>(),
     placeId: uuid("place_id").notNull(),
     /** The map picture, the size of one grid square in picture pixels, and where the grid starts. */
     mapImageId: uuid("map_image_id").references(() => images.id, { onDelete: "set null" }),

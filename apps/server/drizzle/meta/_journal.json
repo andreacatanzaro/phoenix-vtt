@@ -36,6 +36,13 @@
       "when": 1793817946700,
       "tag": "0004_confused_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793827235021,
+      "tag": "0005_even_jubilee",
+      "breakpoints": true
     }
   ]
 }

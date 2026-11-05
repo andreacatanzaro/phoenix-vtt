@@ -5,7 +5,7 @@ import { tableCommandSchema, type TableCommand, type TableEvent } from "@phoenix
 import { requireDm, requireMember, roleIn } from "../access";
 import type { Database } from "../db/types";
 import { fail } from "../http";
-import { applyCommand, CommandError, snapshotFor, type TableDeps } from "../table/commands";
+import { applyCommand, CommandError, openSceneAtTable, sceneAction, snapshotFor, travelAtTable, type TableDeps } from "../table/commands";
 import { applyPrepareCommand, prepareKey, sceneInPlay, snapshotForPrepare } from "../table/prepare";
 import type { TableHub } from "../table/hub";
 import { accountForToken, sessionId as storedSessionId } from "../auth/sessions";
@@ -156,6 +156,27 @@ export function tableRoutes(app: FastifyInstance, db: Database, deps: TableDeps,
       hub.broadcast(room.key, () => ({ type: "presence", present: hub.present(room.key) }));
     });
   };
+
+  // From the atlas, the DM opens a scene at the table, or takes everyone to it along an exit. The same as the table's own commands.
+  for (const [verb, run] of [
+    ["open", openSceneAtTable],
+    ["travel", travelAtTable],
+  ] as const) {
+    app.post(`/api/worlds/:worldId/scenes/:sceneId/${verb}`, async (request, reply) => {
+      const params = prepareParams.safeParse(request.params);
+      const access = await requireDm(request, reply, db, params.success ? params.data.worldId : null);
+      if (access === null) return reply;
+      if (!params.success) return fail(reply, 404, "not-found");
+      try {
+        await sceneAction(deps, access.worldId, (session) => run(deps, session, params.data.sceneId));
+      } catch (error) {
+        if (!(error instanceof CommandError)) throw error;
+        const key = error.key.replace(/^errors\./, "");
+        return fail(reply, key === "table.bad-target" ? 404 : 409, key);
+      }
+      return reply.code(204).send();
+    });
+  }
 
   app.get(
     "/api/worlds/:worldId/table",

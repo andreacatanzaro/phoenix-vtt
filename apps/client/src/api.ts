@@ -18,6 +18,7 @@ import {
   type CreateSessionInput,
   type ElementCollection,
   type ElementView,
+  type MapPoint,
   type ImageKind,
   type ImageView,
   type LoginInput,
@@ -103,7 +104,7 @@ export const api = {
   async tree(worldId: string): Promise<WorldTree> {
     return call("GET", `${world(worldId)}/tree`, worldTreeSchema);
   },
-  async createElement(worldId: string, collection: ElementCollection, input: { name: string; parentId?: string }): Promise<ElementView> {
+  async createElement(worldId: string, collection: ElementCollection, input: { name: string; parentId?: string; polygon?: MapPoint[]; pin?: MapPoint }): Promise<ElementView> {
     return (await call("POST", `${world(worldId)}/${collection}`, elementResponseSchema, input)).element;
   },
   async updateElement(worldId: string, collection: ElementCollection, id: string, patch: UpdateElementInput): Promise<ElementView> {
@@ -149,9 +150,18 @@ export const api = {
   async sceneTable(worldId: string, sceneId: string): Promise<SceneTableView> {
     return (await call("GET", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema)).scene;
   },
-  /** Whether this scene is the one being played in the running session (DM only): that one is not prepared. */
-  async sceneInPlay(worldId: string, sceneId: string): Promise<boolean> {
-    return (await call("GET", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema)).inPlay;
+  /** What the table is doing, as far as this scene goes (DM only): whether a session runs, which scene it plays, and whether it is this one. */
+  async sceneContext(worldId: string, sceneId: string): Promise<{ inPlay: boolean; running: boolean; currentSceneId: string | null }> {
+    const { inPlay, running, currentSceneId } = await call("GET", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema);
+    return { inPlay, running, currentSceneId };
+  },
+  /** Opens the scene at the table, for everyone (DM only, with a session running). */
+  async openSceneAtTable(worldId: string, sceneId: string): Promise<void> {
+    await call("POST", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/open`, null, {});
+  },
+  /** Takes everyone to the scene along an exit of the scene in play (DM only). */
+  async travelToScene(worldId: string, sceneId: string): Promise<void> {
+    await call("POST", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/travel`, null, {});
   },
   async updateSceneTable(worldId: string, sceneId: string, patch: SceneTableInput): Promise<SceneTableView> {
     return (await call("PATCH", `${world(worldId)}/scenes/${encodeURIComponent(sceneId)}/table`, sceneTableResponseSchema, patch)).scene;

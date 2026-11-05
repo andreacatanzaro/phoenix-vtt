@@ -99,7 +99,7 @@ export function imageRoutes(app: FastifyInstance, db: Database, store: ImageStor
     const map = row.mapImageId === null ? null : ((await db.select({ width: images.width, height: images.height }).from(images).where(eq(images.id, row.mapImageId)).limit(1))[0] ?? null);
     // Whether this is the scene being played: that one is edited at the table, not prepared.
     const running = await runningSession(db, access.worldId);
-    return { scene: sceneView(row, map), inPlay: running?.currentSceneId === row.id };
+    return { scene: sceneView(row, map), inPlay: running?.currentSceneId === row.id, running: running !== null, currentSceneId: running?.currentSceneId ?? null };
   });
 
   app.patch("/api/worlds/:worldId/scenes/:sceneId/table", async (request, reply) => {
