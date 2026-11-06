@@ -84,7 +84,7 @@ export function WorldsPage({ account, onSignedOut }: { account: AccountView; onS
           )}
           {last !== undefined && (
             <section className="stack" aria-label={t("ui.worlds.continue")}>
-              <h2 className="section-title">{t("ui.worlds.continue")}</h2>
+              <h2 className="adv-title">{t("ui.worlds.continue")}</h2>
               <div className="adv-row continue">
                 <span className="stack-tight">
                   <span className="continue-name">{last.name}</span>
@@ -99,9 +99,9 @@ export function WorldsPage({ account, onSignedOut }: { account: AccountView; onS
           )}
           <section className="stack" aria-label={t("ui.worlds.list")}>
             <div className="adv-head">
-              <h2 className="section-title">{t("ui.worlds.list")} <span className="count" aria-hidden="true">{worlds?.length ?? 0}</span></h2>
+              <h2 className="adv-title">{t("ui.worlds.list")} <span className="count" aria-hidden="true">{worlds?.length ?? 0}</span></h2>
               <div className="adv-tools">
-                <div className="segmented" role="group" aria-label={t("ui.worlds.filter.label")}>
+                <div className="adv-filter" role="group" aria-label={t("ui.worlds.filter.label")}>
                   {(["all", "dm", "player"] as const).map((f) => (
                     <button key={f} type="button" aria-pressed={filter === f} onClick={() => { setFilter(f); }}>{t(`ui.worlds.filter.${f}`)}</button>
                   ))}
