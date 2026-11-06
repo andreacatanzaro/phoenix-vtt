@@ -56,7 +56,7 @@ describe("opening a world", () => {
     expect(screen.getByRole("heading", { name: "Phoenix" })).toBeTruthy();
     expect(screen.getByText("Dungeon Master")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Tutti i mondi" }));
-    expect(await screen.findByRole("heading", { name: "I tuoi mondi" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "I miei mondi" })).toBeTruthy();
   });
 
   it("the DM and a player see the same four sections", async () => {
@@ -67,6 +67,20 @@ describe("opening a world", () => {
     vi.unstubAllGlobals();
     await openWorld(playerWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: playerTree }] });
     expect(await names()).toEqual(["Struttura", "Sessioni", "Tavolo", "Membri"]);
+  });
+
+  it("the bar of the world is one strip, like the builder of Narrantium: the way back as an arrow, the name, the role, and the sections with an icon each", async () => {
+    await openWorld(dmWorld, { "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [] } }] });
+    const bar = await screen.findByRole("region", { name: "Phoenix" });
+    expect(within(bar).getByRole("button", { name: "Tutti i mondi" }).textContent).toBe("");
+    expect(within(bar).getByRole("heading", { name: "Phoenix" })).toBeTruthy();
+    expect(within(bar).getByText("Ruolo:")).toBeTruthy();
+    expect(within(bar).getByText("Dungeon Master")).toBeTruthy();
+    const sections = within(screen.getByRole("navigation", { name: "Sezioni del mondo" })).getAllByRole("button");
+    expect(sections).toHaveLength(4);
+    for (const button of sections) expect(button.querySelector("svg.icon")).not.toBeNull();
+    // The sections are part of the same strip, below the name.
+    expect(bar.contains(screen.getByRole("navigation", { name: "Sezioni del mondo" }))).toBe(true);
   });
 
   it("marks the section being looked at", async () => {
@@ -123,18 +137,24 @@ describe("the structure", () => {
     expect(await screen.findByText("Qui non c'è ancora niente.")).toBeTruthy();
   });
 
-  it("the DM adds a region by name, and the graph reloads with it", async () => {
+  it("the DM adds a region with one click, like adding a scene on Narrantium: the node is there at once, with a provisional name, and the details open beside it, asking for the name", async () => {
     const server = await openWorld(dmWorld, {
-      "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [] } }, { status: 200, body: { regions: [{ ...el("r9", "Nuovo regno"), areas: [] }] } }],
-      "POST /api/worlds/w1/regions": [{ status: 201, body: { element: el("r9", "Nuovo regno") } }],
+      "GET /api/worlds/w1/tree": [{ status: 200, body: { regions: [] } }, { status: 200, body: { regions: [{ ...el("r9", "Nuova regione"), areas: [] }] } }],
+      "POST /api/worlds/w1/regions": [{ status: 201, body: { element: el("r9", "Nuova regione") } }],
+      "PATCH /api/worlds/w1/regions/r9": [{ status: 200, body: { element: el("r9", "Nuovo regno") } }],
     });
     expect(await screen.findByText("Qui non c'è ancora niente: usa «Aggiungi» per cominciare.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Aggiungi Regione" }));
-    fireEvent.change(screen.getByLabelText("Nuova regione"), { target: { value: "Nuovo regno" } });
-    fireEvent.click(screen.getByRole("button", { name: "Aggiungi" }));
-    expect(await screen.findByRole("button", { name: "Nuovo regno" })).toBeTruthy();
-    expect(server.bodies["POST /api/worlds/w1/regions"]).toEqual([{ name: "Nuovo regno" }]);
-    expect(screen.queryByLabelText("Nuova regione")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Nuova regione" })).toBeTruthy();
+    expect(server.bodies["POST /api/worlds/w1/regions"]).toEqual([{ name: "Nuova regione" }]);
+    // The details are open and the name is being asked for, already in the field.
+    const panel = await screen.findByRole("complementary", { name: "Dettagli dell'elemento" });
+    const field = within(panel).getByLabelText("Nome");
+    expect(field).toHaveProperty("value", "Nuova regione");
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: "Nuovo regno" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Salva" }));
+    await waitFor(() => { expect(server.bodies["PATCH /api/worlds/w1/regions/r9"]).toEqual([{ name: "Nuovo regno", description: "", dmNotes: "" }]); });
   });
 
   it("the DM reveals an element and the change is sent", async () => {

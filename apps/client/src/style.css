@@ -154,7 +154,7 @@ input::placeholder, textarea::placeholder { color: var(--nebbia); opacity: 0.85;
 .brand svg { width: 1.6rem; height: 1.6rem; color: var(--oro); }
 .who { display: flex; align-items: center; gap: 0.75rem; }
 .avatar { width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center; background: rgba(232, 165, 48, 0.12); border: 1px solid rgba(232, 165, 48, 0.5); color: var(--oro); font-family: var(--display); font-weight: 700; }
-.page { width: min(100%, 76rem); margin: 0 auto; padding: clamp(1.25rem, 3vw, 2.25rem); }
+.page { --pad: clamp(1.25rem, 3vw, 2.25rem); width: 100%; margin: 0 auto; padding: var(--pad); }
 .page-title { text-align: center; margin-bottom: 1.5rem; }
 .page-title p { margin: 0.25rem auto 0; max-width: 56ch; }
 
@@ -173,26 +173,56 @@ input::placeholder, textarea::placeholder { color: var(--nebbia); opacity: 0.85;
 .segmented button[aria-selected="true"] { background: rgba(232, 165, 48, 0.14); border-bottom-color: var(--oro); color: var(--osso); }
 
 /* ---- worlds ---- */
-.world-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 20rem)); justify-content: center; gap: 1rem; margin-top: 0.5rem; }
-.world-card { position: relative; overflow: hidden; width: 100%; min-height: 9rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.2rem; text-align: left; background: var(--lavagna); border: 1px solid var(--traccia); border-radius: 8px; cursor: pointer; transition: border-color 140ms, box-shadow 140ms; }
-.world-card::after { content: ""; position: absolute; right: -2.2rem; top: -2.2rem; width: 9rem; height: 9rem; border-radius: 50%; border: 1px solid rgba(232, 165, 48, 0.16); box-shadow: inset 0 0 0 1.4rem rgba(232, 165, 48, 0.025), inset 0 0 0 1.45rem rgba(232, 165, 48, 0.1); pointer-events: none; }
-.world-card:hover { border-color: rgba(232, 165, 48, 0.55); box-shadow: var(--glow); }
-.world-card.dm { border-color: rgba(232, 165, 48, 0.4); background: linear-gradient(160deg, rgba(232, 165, 48, 0.06), transparent 55%), var(--lavagna); }
-.world-card .name { font-family: var(--display); font-weight: 700; font-size: var(--step-1); letter-spacing: 0.04em; line-height: 1.25; position: relative; }
-.world-card .meta { color: var(--nebbia); font-size: var(--step--1); }
-.create-world { margin: 2.5rem auto 0; max-width: 30rem; }
+/* ---- my worlds: laid out like the adventures of Narrantium ---- */
+.adventures { width: min(100%, 72rem); margin: 0 auto; display: grid; gap: 1.75rem; }
+.action-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
+.action-card { position: relative; overflow: hidden; display: grid; gap: 0.35rem; align-content: end; width: min(100%, 20.5rem); min-height: 10.5rem; padding: 1.1rem 1.25rem; text-align: left; color: var(--osso); background: var(--lavagna); border: 1px solid var(--traccia); border-radius: 0.6rem; cursor: pointer; }
+.action-card::after { content: ""; position: absolute; right: -2.5rem; top: -2.5rem; width: 10rem; height: 10rem; border-radius: 50%; border: 1px solid rgba(232, 165, 48, 0.16); box-shadow: inset 0 0 0 1.4rem rgba(232, 165, 48, 0.03); pointer-events: none; }
+.action-card:hover, .action-card[aria-expanded="true"] { border-color: rgba(232, 165, 48, 0.55); box-shadow: var(--glow); }
+.action-card.gold { border-color: rgba(232, 165, 48, 0.4); background: linear-gradient(160deg, rgba(232, 165, 48, 0.07), transparent 60%), var(--lavagna); }
+.action-icon { position: absolute; left: 1.25rem; top: 1.1rem; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 0.5rem; background: rgba(232, 165, 48, 0.14); color: var(--oro); }
+.action-icon .icon { width: 1.3rem; height: 1.3rem; }
+.action-title { font-family: var(--display); font-weight: 700; font-size: var(--step-1); letter-spacing: 0.04em; }
+.action-hint { color: var(--nebbia); font-size: var(--step--1); }
+.section-title { font-size: var(--step-1); letter-spacing: 0.04em; margin: 0; }
+.section-title .count { display: inline-grid; place-items: center; min-width: 1.5rem; padding: 0 0.4rem; margin-left: 0.4rem; border-radius: 999px; background: var(--cartiglio); color: var(--nebbia); font-family: var(--ui); font-size: 0.72rem; letter-spacing: 0; vertical-align: middle; }
+.adv-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem; }
+.adv-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.segmented { display: inline-flex; padding: 0.2rem; gap: 0.15rem; border: 1px solid var(--traccia); border-radius: 0.5rem; background: var(--notte); }
+.segmented button { padding: 0.4rem 0.8rem; background: none; border: 0; border-radius: 0.35rem; color: var(--nebbia); font-size: var(--step--1); cursor: pointer; }
+.segmented button:hover { color: var(--osso); }
+.segmented button[aria-pressed="true"] { background: var(--cartiglio); color: var(--osso); box-shadow: inset 0 0 0 1px rgba(232, 165, 48, 0.4); }
+.search { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0 0.7rem; border: 1px solid var(--traccia); border-radius: 0.5rem; background: var(--notte); color: var(--nebbia); }
+.search .icon { width: 1rem; height: 1rem; }
+.search input { width: 15rem; max-width: 100%; padding: 0.55rem 0; background: none; border: 0; outline: none; color: var(--osso); }
+.search:focus-within { border-color: var(--oro); }
+.adv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.adv-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1.1rem; background: var(--lavagna); border: 1px solid var(--traccia); border-radius: 0.6rem; }
+.adv-row:hover { border-color: rgba(232, 165, 48, 0.4); }
+.adv-row.continue { border-color: rgba(232, 165, 48, 0.4); background: linear-gradient(160deg, rgba(232, 165, 48, 0.06), transparent 55%), var(--lavagna); }
+.adv-row .name, .adv-row .continue-name { font-family: var(--display); font-weight: 700; font-size: var(--step-1); letter-spacing: 0.04em; }
+.adv-row .meta { color: var(--nebbia); font-size: var(--step--1); }
+.stack-tight { display: grid; gap: 0.3rem; min-width: 0; }
+.adv-empty { display: grid; justify-items: center; gap: 0.6rem; padding: 2.5rem 1rem; text-align: center; color: var(--nebbia); border: 1px dashed var(--traccia); border-radius: 0.6rem; }
+.adv-empty .icon { width: 2.4rem; height: 2.4rem; color: var(--nebbia); }
+.adv-empty p { margin: 0; max-width: 46ch; }
+.create-world { margin: 0 auto; width: min(100%, 30rem); }
 .panel.framed { padding: 1.7rem 1.8rem; }
 
 /* ---- a world ---- */
-.world-head { text-align: center; margin-bottom: 0.5rem; }
+/* The bar of a world: one strip across the window, like the builder of Narrantium (way back, name and role, then the sections with an icon each). */
+.world-bar { margin: calc(-1 * var(--pad)) calc(-1 * var(--pad)) 1.25rem; background: var(--lavagna); border-bottom: 1px solid var(--traccia); }
+.world-bar-top { display: flex; align-items: center; gap: 0.9rem; padding: 0.7rem var(--pad); border-bottom: 1px solid var(--traccia); }
+.bar-sep { width: 1px; align-self: stretch; margin: 0.15rem 0; background: var(--traccia); }
+.bar-title h1 { font-size: var(--step-1); line-height: 1.15; color: var(--oro); margin: 0; }
+.bar-role { display: flex; align-items: center; gap: 0.45rem; margin: 0.2rem 0 0; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--nebbia); }
 .crumb { color: var(--nebbia); text-decoration: underline; text-underline-offset: 0.2em; background: none; border: 0; padding: 0; cursor: pointer; font-size: var(--step--1); }
 .crumb:hover { color: var(--osso); }
-.world-head h1 { font-size: var(--step-3); margin-top: 0.25rem; }
-.world-head .muted { font-size: var(--step--1); }
-.tabs { display: flex; justify-content: center; gap: clamp(0.5rem, 3vw, 2rem); border-bottom: 1px solid var(--traccia); margin: 1rem 0 1.5rem; overflow-x: auto; }
-.tabs button { padding: 0.75rem 0.5rem; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--nebbia); font-family: var(--display); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+.tabs { display: flex; justify-content: flex-start; gap: clamp(0.5rem, 2.5vw, 2.25rem); padding: 0 var(--pad); margin: 0; overflow-x: auto; }
+.tabs button { display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.85rem 0.5rem; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--nebbia); font-family: var(--display); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
 .tabs button:hover { color: var(--osso); }
-.tabs button[aria-current="page"] { color: var(--oro); border-bottom-color: var(--oro); }
+.tabs button .icon { width: 1.1rem; height: 1.1rem; }
+.tabs button[aria-current="page"] { color: var(--oro); border-bottom-color: var(--oro); box-shadow: 0 6px 10px -8px var(--oro); }
 
 /* ---- structure: the tree and what is selected ---- */
 .atlas { display: grid; grid-template-columns: minmax(15rem, 21rem) minmax(0, 1fr); gap: clamp(1rem, 3vw, 2rem); align-items: start; }
@@ -354,7 +384,7 @@ kbd { display: inline-block; min-width: 1.5rem; padding: 0.05rem 0.4rem; text-al
 @media (max-width: 40rem) {
   .detail { padding: 1.1rem 1rem; }
   .tabs { justify-content: flex-start; }
-  .world-head h1 { font-size: var(--step-2); }
+  .bar-title h1 { font-size: var(--step-0); }
 }
 
 /* The maps of the atlas: a picture with the areas as shapes and the places and scenes as pins, all placed by fractions. */
@@ -389,16 +419,26 @@ kbd { display: inline-block; min-width: 1.5rem; padding: 0.05rem 0.4rem; text-al
 @media (prefers-reduced-motion: no-preference) { .atlas-pin, .atlas-area { transition: box-shadow 120ms, fill 120ms; } }
 
 /* The structure of a world as a graph: round nodes over a night sky, groups that are gone into, scenes joined by lines. */
-.graph-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; }
+/* "Struttura" takes the whole window below the bar of the world, edge to edge, like the builder of Narrantium: a strip of tools, then the graph, and the details beside it. */
+.page:has(> .world-shell.full) { padding: 0; }
+.world-shell.full { display: flex; flex-direction: column; height: calc(100vh - 3.5rem); min-height: 30rem; }
+.world-shell.full .world-bar { margin: 0; flex: none; }
+.world-shell.full .world-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.struct-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.struct-notice { margin: 0.5rem var(--pad); }
+.graph-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; padding: 0.6rem var(--pad); background: var(--lavagna); border-bottom: 1px solid var(--traccia); }
 .graph-path { display: flex; flex-wrap: wrap; align-items: center; color: var(--nebbia); font-size: var(--step--1); }
 .graph-path .crumb[aria-current="location"] { color: var(--oro); text-decoration: none; cursor: default; }
 .graph-find select { min-width: 12rem; padding: 0.35rem 0.6rem; font-size: var(--step--1); }
-.struct-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(0.75rem, 2vw, 1.25rem); align-items: start; }
-.struct-layout.with-detail { grid-template-columns: minmax(0, 1fr) minmax(18rem, 27rem); }
-.struct-detail { position: relative; min-width: 0; max-height: min(80vh, 60rem); overflow-y: auto; }
+.struct-layout { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; align-items: stretch; }
+.struct-detail { position: relative; min-width: 0; min-height: 0; overflow-y: auto; padding: 1rem 1.25rem; background: var(--lavagna); border-left: 1px solid var(--traccia); }
+/* The details float over the graph on the right, like the menu of Narrantium: the graph keeps the whole window. */
+.struct-detail.floating { position: absolute; z-index: 6; top: 0.75rem; right: 0.75rem; bottom: 0.75rem; width: min(30rem, calc(100% - 1.5rem)); border: 1px solid var(--traccia); border-radius: 0.6rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55); animation: float-in 0.18s ease-out; }
+@keyframes float-in { from { opacity: 0; transform: translateX(1rem); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .struct-detail.floating { animation: none; } }
 .struct-close { position: absolute; top: 0.5rem; right: 0.5rem; z-index: 2; }
 .graph-sky {
-  position: relative; overflow: hidden; height: clamp(26rem, 68vh, 46rem); border: 1px solid var(--traccia); border-radius: 8px; touch-action: none; cursor: grab; user-select: none;
+  position: relative; overflow: hidden; height: 100%; min-height: 20rem; border: 0; border-radius: 0; touch-action: none; cursor: grab; user-select: none;
   background:
     radial-gradient(1.2px 1.2px at 12% 18%, var(--osso) 50%, transparent 52%),
     radial-gradient(1px 1px at 27% 64%, var(--osso) 50%, transparent 52%),
@@ -443,12 +483,12 @@ kbd { display: inline-block; min-width: 1.5rem; padding: 0.05rem 0.4rem; text-al
 .graph-count { padding: 0 0.35rem; border-radius: 999px; background: rgba(23, 16, 5, 0.18); }
 .graph-waiting { position: absolute; left: 50%; top: -0.7rem; transform: translateX(-50%); padding: 0.05rem 0.5rem; border-radius: 999px; background: var(--brace); color: var(--osso); font-size: 0.68rem; white-space: nowrap; }
 .graph-name { position: absolute; left: 50%; top: calc(100% + 0.9rem); transform: translateX(-50%); max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--display); font-size: var(--step-0); text-shadow: 0 1px 6px #000; pointer-events: none; }
-.graph-actions { position: absolute; transform: translateX(-50%); display: flex; gap: 0.3rem; z-index: 3; margin-top: 1.4rem; }
+.graph-actions { position: absolute; transform: translateX(-50%); display: flex; gap: 0.3rem; z-index: 3; margin-top: 2.2rem; }
 .graph-act { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0.35rem; border-radius: 0.5rem; border: 1px solid var(--oro-bordo); background: var(--oro); color: var(--oro-ink); cursor: pointer; }
 .graph-act svg { width: 100%; height: 100%; }
 .graph-hint { position: absolute; left: 50%; top: 0.75rem; transform: translateX(-50%); margin: 0; z-index: 4; }
 .graph-empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; color: var(--nebbia); font-family: var(--flavor); font-style: italic; text-align: center; }
-.graph-tools { position: absolute; top: 0.75rem; right: 0.75rem; z-index: 4; }
+.graph-tools { position: absolute; top: 0.75rem; left: 0.75rem; z-index: 4; }
 .graph-zoom { min-width: 3rem; text-align: center; color: var(--nebbia); font-size: var(--step--1); }
-@media (max-width: 60rem) { .struct-layout.with-detail { grid-template-columns: minmax(0, 1fr); } .struct-detail { max-height: none; } }
+
 @media (prefers-reduced-motion: no-preference) { .graph-disc { transition: box-shadow 120ms; } }

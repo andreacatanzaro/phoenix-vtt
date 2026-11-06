@@ -29,6 +29,8 @@ export type GraphCanvasProps = {
   canEdit: boolean;
   /** The group being shown: when it changes, the whole of it is brought into view again. */
   fitKey: string;
+  /** Pixels on the right that something floats over (the details): a node picked there is moved out from under it. */
+  clearRight?: number;
   /** Said when there are no nodes. */
   empty?: string;
   onSelect: (id: string | null) => void;
@@ -52,7 +54,7 @@ type Pan = { from: Point; view: View; moved: boolean };
  * into, scenes joined by lines. It moves like a map (drag the sky, wheel to zoom), the DM drags the nodes and joins scenes.
  * The nodes are buttons with a name, so everything can be picked without the mouse.
  */
-export function GraphCanvas({ nodes, edges, canEdit, fitKey, empty, onSelect, onEnter, onMove, onEdge, onConnect }: GraphCanvasProps) {
+export function GraphCanvas({ nodes, edges, canEdit, fitKey, clearRight = 0, empty, onSelect, onEnter, onMove, onEdge, onConnect }: GraphCanvasProps) {
   const sky = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ zoom: 1, panX: 500, panY: 300 });
   const [locked, setLocked] = useState(false);
@@ -124,6 +126,22 @@ export function GraphCanvas({ nodes, edges, canEdit, fitKey, empty, onSelect, on
     observer.observe(element);
     return () => { observer.disconnect(); };
   }, []);
+
+  // A node picked under the strip something floats over is brought out from under it, with room for the button under the node.
+  const pickedId = nodes.find((n) => n.selected)?.id;
+  useLayoutEffect(() => {
+    if (pickedId === undefined || clearRight <= 0) return;
+    const chosen = latest.current.nodes.find((n) => n.id === pickedId);
+    if (chosen === undefined) return;
+    const size = screen();
+    setView((v) => {
+      const margin = radiusOf(chosen) * v.zoom + 12;
+      const limit = size.w - clearRight;
+      if (limit < margin * 2) return v;
+      const x = chosen.at.x * v.zoom + v.panX;
+      return x + margin <= limit ? v : { ...v, panX: v.panX - (x + margin - limit) };
+    });
+  }, [pickedId, clearRight]);
 
   useEffect(() => {
     if (linkFrom === null) return;

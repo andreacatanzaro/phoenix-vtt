@@ -200,6 +200,43 @@ describe("GraphCanvas when its size changes", () => {
   });
 });
 
+describe("GraphCanvas keeping a picked node clear of the floating details", () => {
+  const panX = (world: HTMLElement): number => Number(/translate\((-?[\d.]+)px/.exec(world.style.transform)?.[1]);
+
+  it("a node picked under the strip the details cover is moved out from under it, with room left for its button", () => {
+    // The details cover the right 500 pixels of a canvas 1000 wide; the only node is in the middle, at 500.
+    const { world } = setup({ nodes: [group("g1", "Foresta", { x: 0, y: 0 }, { selected: true })], clearRight: 500 });
+    expect(panX(world())).toBeLessThanOrEqual(500 - 90);
+    expect(panX(world())).toBeGreaterThan(90);
+  });
+
+  it("a node that is already clear is not moved", () => {
+    const { world } = setup({ nodes: [group("g1", "Foresta", { x: -300, y: 0 }, { selected: true }), group("g2", "Monti", { x: 300, y: 0 })], clearRight: 500 });
+    expect(panX(world())).toBe(500);
+  });
+
+  it("nothing is moved when no room is to be kept clear, or nothing is picked", () => {
+    expect(panX(setup({ nodes: [group("g1", "Foresta", { x: 0, y: 0 }, { selected: true })] }).world())).toBe(500);
+    cleanup();
+    expect(panX(setup({ nodes: [group("g1", "Foresta", { x: 0, y: 0 })], clearRight: 500 }).world())).toBe(500);
+  });
+
+  it("when the room left is too small for the node, nothing is moved", () => {
+    const { world } = setup({ nodes: [group("g1", "Foresta", { x: 0, y: 0 }, { selected: true })], clearRight: 950 });
+    expect(panX(world())).toBe(500);
+  });
+
+  it("picking another node under the strip moves that one", () => {
+    const nodes = (picked: string): GraphNode[] => [group("g1", "Foresta", { x: -300, y: 0 }, { selected: picked === "g1" }), group("g2", "Monti", { x: 300, y: 0 }, { selected: picked === "g2" })];
+    const props = { edges: [], canEdit: true, fitKey: "a", clearRight: 500, onSelect: vi.fn(), onEnter: vi.fn(), onMove: vi.fn(), onEdge: vi.fn(), onConnect: vi.fn() };
+    const { rerender } = render(<GraphCanvas nodes={nodes("g1")} {...props} />);
+    expect(panX(screen.getByTestId("graph-world"))).toBe(500);
+    rerender(<GraphCanvas nodes={nodes("g2")} {...props} />);
+    // The node at 300 is at 800 on the screen: it has to come to 410 or less.
+    expect(300 + panX(screen.getByTestId("graph-world"))).toBeLessThanOrEqual(410);
+  });
+});
+
 describe("GraphCanvas keeping the picked node where it is when its size changes", () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 

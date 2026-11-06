@@ -219,38 +219,25 @@ describe("the scenes of a place", () => {
   });
 });
 
-describe("placing is required where there is a map to place on", () => {
-  it("an area made under a region with a map needs its shape; under a region without one it needs none", async () => {
-    const { w, region } = await mapped("req-area");
-    const refused = await c.post(`${w.base}/areas`, { name: "X", parentId: region }, w.dm);
-    expect(refused.statusCode).toBe(400);
-    expect(field(refused, "error")).toBe("errors.world.placement-required");
-    const bare = await world("req-area2");
+describe("elements made by name, with or without a map above", () => {
+  it("an area, a place and a scene can be made with only a name, also under a region, an area or a place that has a map", async () => {
+    const { w, region, area } = await mapped("byname");
+    expect((await c.post(`${w.base}/areas`, { name: "X", parentId: region }, w.dm)).statusCode).toBe(201);
+    const place = await create(w, "places", { parentId: area, pin: { x: 0.3, y: 0.3 } });
+    await update(w, "places", place, { mapImageId: await map(w) });
+    expect((await c.post(`${w.base}/places`, { name: "Y", parentId: area }, w.dm)).statusCode).toBe(201);
+    expect((await c.post(`${w.base}/scenes`, { name: "Z", parentId: place }, w.dm)).statusCode).toBe(201);
+  });
+
+  it("a position given when the element is made is still checked: a shape needs a map, a pin must be inside its area", async () => {
+    const bare = await world("byname-bad");
     const loose = await create(bare, "regions", {});
-    expect((await c.post(`${bare.base}/areas`, { name: "X", parentId: loose }, bare.dm)).statusCode).toBe(201);
+    expect((await c.post(`${bare.base}/areas`, { name: "X", parentId: loose, polygon: square }, bare.dm)).statusCode).toBe(400);
+    const { w, area } = await mapped("byname-bad2");
+    expect((await c.post(`${w.base}/places`, { name: "X", parentId: area, pin: { x: 0.9, y: 0.9 } }, w.dm)).statusCode).toBe(400);
   });
 
-  it("a place made in an area that is drawn needs its pin; in an area that is not drawn it needs none", async () => {
-    const { w, area, region } = await mapped("req-place");
-    const refused = await c.post(`${w.base}/places`, { name: "X", parentId: area }, w.dm);
-    expect(refused.statusCode).toBe(400);
-    expect(field(refused, "error")).toBe("errors.world.placement-required");
-    const undrawn = await insertArea(w, region);
-    expect((await c.post(`${w.base}/places`, { name: "X", parentId: undrawn }, w.dm)).statusCode).toBe(201);
-  });
-
-  it("a scene made in a place with a map needs its pin; in a place without one it needs none", async () => {
-    const { w, area } = await mapped("req-scene");
-    const withMap = await create(w, "places", { parentId: area, pin: { x: 0.3, y: 0.3 } });
-    await update(w, "places", withMap, { mapImageId: await map(w) });
-    const refused = await c.post(`${w.base}/scenes`, { name: "X", parentId: withMap }, w.dm);
-    expect(refused.statusCode).toBe(400);
-    expect(field(refused, "error")).toBe("errors.world.placement-required");
-    const without = await create(w, "places", { parentId: area, pin: { x: 0.4, y: 0.4 } });
-    expect((await c.post(`${w.base}/scenes`, { name: "X", parentId: without }, w.dm)).statusCode).toBe(201);
-  });
-
-  it("what was made before stays as it is: an unplaced element under a map can still be changed", async () => {
+  it("what was made before the maps can still be changed", async () => {
     const { w, region } = await mapped("req-old");
     const old = await insertArea(w, region);
     expect(field(await update(w, "areas", old, { name: "Rinominata" }), "element", "name")).toBe("Rinominata");

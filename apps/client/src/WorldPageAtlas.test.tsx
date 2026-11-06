@@ -88,22 +88,6 @@ describe("the structure as a graph, for the DM", () => {
     expect(crumbs()).toEqual(["Tutto il mondo"]);
   });
 
-  it("what could be placed on a map that exists and is not is marked on its node", async () => {
-    await openWorld("dm");
-    await enter("Regno");
-    expect(within(graphNode("Monti") ?? document.body).getByText("Da piazzare")).toBeTruthy();
-    expect(within(graphNode("Foresta") ?? document.body).queryByText("Da piazzare")).toBeNull();
-  });
-
-  it("picking one that waits shows it, with a note that it is not on a map and how to place it", async () => {
-    await openWorld("dm");
-    await enter("Regno");
-    fireEvent.click(await within(sky()).findByRole("button", { name: "Monti" }));
-    expect(await screen.findByText("Non è ancora su una mappa.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Piazza sulla mappa" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Elimina" })).toBeTruthy();
-  });
-
   it("the details of what is picked are on the right, and can be closed", async () => {
     await openWorld("dm");
     fireEvent.click(await within(sky()).findByRole("button", { name: "Regno" }));
@@ -111,15 +95,6 @@ describe("the structure as a graph, for the DM", () => {
     expect(within(detail).getByRole("heading", { name: "Regno" })).toBeTruthy();
     fireEvent.click(within(detail).getByRole("button", { name: "Chiudi" }));
     expect(screen.queryByRole("complementary", { name: "Dettagli dell'elemento" })).toBeNull();
-  });
-
-  it("the map of the region is in its details, with the area and the place on it", async () => {
-    await openWorld("dm");
-    fireEvent.click(await within(sky()).findByRole("button", { name: "Regno" }));
-    expect(await screen.findByRole("img", { name: "Mappa di Regno" })).toBeTruthy();
-    const map = within(screen.getByTestId("atlas-map"));
-    expect(map.getByRole("button", { name: "Foresta" })).toBeTruthy();
-    expect(map.getByRole("button", { name: "Locanda" })).toBeTruthy();
   });
 
   it("the group being shown can be edited from its path, without picking one of its nodes", async () => {
@@ -141,47 +116,30 @@ describe("the structure as a graph, for the DM", () => {
 });
 
 describe("making and moving things on the graph", () => {
-  it("where there is a map to put things on, adding goes to the map: the button says so and opens the details of the group, where the map is", async () => {
-    const { server } = await openWorld("dm", tree);
-    await enter("Regno");
-    expect(screen.queryByRole("button", { name: "Aggiungi Area" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Area sulla mappa" }));
-    expect(screen.queryByLabelText("Nuova area")).toBeNull();
-    expect(await screen.findByRole("img", { name: "Mappa di Regno" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Disegna un'area" })).toBeTruthy();
-    expect(server.calls.filter((c) => c.startsWith("POST"))).toEqual([]);
-  });
-
-  it("the same for places in an area that is drawn, and for scenes in a place that has a map", async () => {
-    await openWorld("dm");
-    await enter("Regno");
-    await enter("Foresta");
-    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Luogo sulla mappa" }));
-    expect(await screen.findByRole("button", { name: "Aggiungi un luogo in quest'area" })).toBeTruthy();
-    await enter("Locanda");
-    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Scena sulla mappa" }));
-    expect(await screen.findByRole("button", { name: "Aggiungi una scena" })).toBeTruthy();
-  });
-
-  it("the regions have no map above them: they are always added by name", async () => {
+  it("everything is added by name, also under a region, an area or a place that has a map", async () => {
     await openWorld("dm");
     expect(screen.getByRole("button", { name: "Aggiungi Regione" })).toBeTruthy();
-  });
-
-  it("an area that is not drawn is added to by name, even if its region has a map", async () => {
-    await openWorld("dm");
     await enter("Regno");
-    await enter("Monti");
+    expect(screen.getByRole("button", { name: "Aggiungi Area" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /sulla mappa/ })).toBeNull();
+    await enter("Foresta");
     expect(screen.getByRole("button", { name: "Aggiungi Luogo" })).toBeTruthy();
+    await enter("Locanda");
+    expect(screen.getByRole("button", { name: "Aggiungi Scena" })).toBeTruthy();
   });
 
-  it("when the server refuses a name that was typed while the map appeared, the reason stays on the screen", async () => {
-    await openWorld("dm", mapless, { "POST /api/worlds/w1/areas": [{ status: 400, body: { error: "errors.world.placement-required" } }] });
+  it("no map of the atlas is shown: not in the details, not on the nodes, and nothing waits to be placed", async () => {
+    await openWorld("dm");
+    expect(graphNode("Regno")?.querySelector("img")).toBeNull();
+    fireEvent.click(await within(sky()).findByRole("button", { name: "Regno" }));
+    await screen.findByRole("heading", { name: "Regno" });
+    expect(screen.queryByTestId("atlas-map")).toBeNull();
+    expect(screen.queryByRole("img", { name: "Mappa di Regno" })).toBeNull();
     await enter("Regno");
-    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Area" }));
-    fireEvent.change(screen.getByLabelText("Nuova area"), { target: { value: "Paludi" } });
-    fireEvent.click(screen.getByRole("button", { name: "Aggiungi" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("Sopra c'è una mappa: questo elemento va piazzato sulla mappa, non creato con il solo nome.");
+    expect(within(graphNode("Monti") ?? document.body).queryByText("Da piazzare")).toBeNull();
+    fireEvent.click(await within(sky()).findByRole("button", { name: "Monti" }));
+    expect(screen.queryByText("Non è ancora su una mappa.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Piazza sulla mappa" })).toBeNull();
   });
 
   it("a link that is refused says why and the message stays: the graph is not read again over it", async () => {
@@ -212,26 +170,33 @@ describe("making and moving things on the graph", () => {
     expect(server.calls.filter((c) => c === "GET /api/worlds/w1/tree")).toHaveLength(1);
   });
 
-  it("without maps, areas, places and scenes are added by name, at each level", async () => {
+  it("one click adds an area, a place or a scene with a provisional name, inside the group being shown, at each level", async () => {
     const { server } = await openWorld("dm", mapless);
-    /** Types a name in the form with this label and adds it. */
-    const add = async (button: string, label: string, name: string): Promise<void> => {
-      fireEvent.click(screen.getByRole("button", { name: button }));
-      const input = await screen.findByLabelText(label);
-      fireEvent.change(input, { target: { value: name } });
-      const form = input.closest("form");
-      if (form === null) throw new Error("no form");
-      fireEvent.click(within(form).getByRole("button", { name: "Aggiungi" }));
-    };
     await enter("Regno");
-    await add("Aggiungi Area", "Nuova area", "Paludi");
-    await waitFor(() => { expect(server.bodies["POST /api/worlds/w1/areas"]).toEqual([{ name: "Paludi", parentId: "r1" }]); });
+    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Area" }));
+    await waitFor(() => { expect(server.bodies["POST /api/worlds/w1/areas"]).toEqual([{ name: "Nuova area", parentId: "r1" }]); });
     await enter("Foresta");
-    await add("Aggiungi Luogo", "Nuovo luogo", "Torre");
-    await waitFor(() => { expect(server.bodies["POST /api/worlds/w1/places"]).toEqual([{ name: "Torre", parentId: "a1" }]); });
+    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Luogo" }));
+    await waitFor(() => { expect(server.bodies["POST /api/worlds/w1/places"]).toEqual([{ name: "Nuovo luogo", parentId: "a1" }]); });
     await enter("Locanda");
-    await add("Aggiungi Scena", "Nuova scena", "Soffitta");
-    await waitFor(() => { expect(server.bodies["POST /api/worlds/w1/scenes"]).toEqual([{ name: "Soffitta", parentId: "p1" }]); });
+    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Scena" }));
+    await waitFor(() => { expect(server.bodies["POST /api/worlds/w1/scenes"]).toEqual([{ name: "Nuova scena", parentId: "p1" }]); });
+  });
+
+  it("the details are a floating menu over the graph, on the right, and do not take room from it", async () => {
+    await openWorld("dm", mapless);
+    fireEvent.click(await within(sky()).findByRole("button", { name: "Regno" }));
+    const panel = await screen.findByRole("complementary", { name: "Dettagli dell'elemento" });
+    expect(panel.className).toContain("floating");
+    expect(sky().parentElement?.className).not.toContain("with-detail");
+  });
+
+  it("a refused creation says why, and nothing is selected", async () => {
+    await openWorld("dm", mapless, { "POST /api/worlds/w1/areas": [{ status: 500 }] });
+    await enter("Regno");
+    fireEvent.click(screen.getByRole("button", { name: "Aggiungi Area" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByRole("complementary", { name: "Dettagli dell'elemento" })).toBeNull();
   });
 
   it("a node dragged to another place is saved there", async () => {
@@ -269,14 +234,13 @@ describe("making and moving things on the graph", () => {
 });
 
 describe("the structure as a graph, for a player", () => {
-  it("shows only what is on a map, and what waits to be placed is not even in the search", async () => {
+  it("sees everything that is revealed, also what was made before the maps", async () => {
     await openWorld("player");
     const find = await screen.findByLabelText("Trova");
     const options = within(find).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toContain("Regno › Foresta");
-    for (const hidden of ["Monti", "Cantina", "Rifugio"]) expect(options.some((o) => o.includes(hidden))).toBe(false);
+    for (const name of ["Monti", "Cantina", "Rifugio"]) expect(options.some((o) => o.includes(name))).toBe(true);
     await enter("Regno");
-    expect(graphNode("Monti")).toBeNull();
+    expect(graphNode("Monti")).not.toBeNull();
   });
 
   it("can only walk it: nothing to add, move, link, or change", async () => {
@@ -284,26 +248,9 @@ describe("the structure as a graph, for a player", () => {
     expect(screen.queryByRole("button", { name: /^Aggiungi/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Blocca i nodi" })).toBeNull();
     fireEvent.click(await within(sky()).findByRole("button", { name: "Regno" }));
-    expect(await screen.findByRole("img", { name: "Mappa di Regno" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Regno" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Elimina" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Disegna un'area" })).toBeNull();
-  });
-
-  it("walks the maps in the details too: a place on the map of the region opens its own page, read only", async () => {
-    await openWorld("player");
-    fireEvent.click(await within(sky()).findByRole("button", { name: "Regno" }));
-    fireEvent.keyDown(within(await screen.findByTestId("atlas-map")).getByRole("button", { name: "Locanda" }), { key: "Enter" });
-    expect(await screen.findByRole("heading", { name: "Locanda" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Mappa di Locanda" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Aggiungi una scena" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Elimina" })).toBeNull();
-  });
-
-  it("in a world without maps a player sees everything that is revealed, since there is no other way to find it", async () => {
-    await openWorld("player", mapless);
-    await pickElement("Sala");
-    expect(await screen.findByRole("heading", { name: "Sala" })).toBeTruthy();
-    expect(graphNode("Cantina")).not.toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 
   it("is told there is nothing to see when nothing is revealed", async () => {

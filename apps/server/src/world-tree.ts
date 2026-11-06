@@ -51,7 +51,7 @@ export async function loadTree(db: Database, worldId: string, dm: boolean): Prom
  */
 export const atlasQueueKey = (worldId: string): string => `atlas:${worldId}`;
 
-export type CreateResult = { element: ElementView } | "parent-invalid" | "placement-invalid" | "placement-required";
+export type CreateResult = { element: ElementView } | "parent-invalid" | "placement-invalid";
 
 /** Whether this is a map of this world (a picture of the kind "map"). */
 async function isMapOf(db: Database, worldId: string, imageId: string): Promise<boolean> {
@@ -80,8 +80,7 @@ async function placeHasMap(db: Database, worldId: string, placeId: string): Prom
 /**
  * Creates an element; a child must name a parent of the right level in the same world. What it has on the maps is checked
  * with it: an area's shape needs the region to have a map, a place's pin must be inside its area, a scene's pin needs the
- * place to have a map. And where such a map is there, the element must be placed on it: only what has no map above it is
- * made without a position (what was made before the atlas stays as it is, and can still be changed).
+ * place to have a map. A position is optional: an element can always be made with only a name.
  */
 export async function createElement(
   db: Database,
@@ -107,27 +106,23 @@ export async function createElement(
       const parent = await db.select({ id: regions.id }).from(regions).where(and(eq(regions.id, parentId), eq(regions.worldId, worldId))).limit(1);
       if (parent.length === 0) return "parent-invalid";
       if (input.pin !== undefined) return "placement-invalid";
-      const regionMap = await regionHasMap(db, worldId, parentId);
-      if (input.polygon !== undefined && !regionMap) return "placement-invalid";
-      // Where there is a map to draw it on, an area is drawn on it; without a map it is a plain element.
-      if (input.polygon === undefined && regionMap) return "placement-required";
+      if (input.polygon !== undefined && !(await regionHasMap(db, worldId, parentId))) return "placement-invalid";
       return done((await db.insert(areas).values({ ...values, regionId: parentId, polygon: input.polygon ?? null }).returning())[0]);
     }
     if (collection === "places") {
       const parent = await db.select({ id: areas.id }).from(areas).where(and(eq(areas.id, parentId), eq(areas.worldId, worldId))).limit(1);
       if (parent.length === 0) return "parent-invalid";
       if (input.polygon !== undefined) return "placement-invalid";
-      const shape = await polygonOfArea(db, worldId, parentId);
-      if (input.pin !== undefined && (shape === null || !pointInPolygon(input.pin, shape))) return "placement-invalid";
-      if (input.pin === undefined && shape !== null) return "placement-required";
+      if (input.pin !== undefined) {
+        const shape = await polygonOfArea(db, worldId, parentId);
+        if (shape === null || !pointInPolygon(input.pin, shape)) return "placement-invalid";
+      }
       return done((await db.insert(places).values({ ...values, areaId: parentId, pin: input.pin ?? null }).returning())[0]);
     }
     const parent = await db.select({ id: places.id }).from(places).where(and(eq(places.id, parentId), eq(places.worldId, worldId))).limit(1);
     if (parent.length === 0) return "parent-invalid";
     if (input.polygon !== undefined) return "placement-invalid";
-    const placeMap = await placeHasMap(db, worldId, parentId);
-    if (input.pin !== undefined && !placeMap) return "placement-invalid";
-    if (input.pin === undefined && placeMap) return "placement-required";
+    if (input.pin !== undefined && !(await placeHasMap(db, worldId, parentId))) return "placement-invalid";
     return done((await db.insert(scenes).values({ ...values, placeId: parentId, pin: input.pin ?? null }).returning())[0]);
   } catch (error) {
     if (isForeignKeyViolation(error)) return "parent-invalid";

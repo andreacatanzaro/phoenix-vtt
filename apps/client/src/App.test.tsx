@@ -83,9 +83,10 @@ describe("App", () => {
     });
     render(<App />);
     expect(await screen.findByText(/Non fai ancora parte di nessun mondo/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Nuovo mondo" }));
     fireEvent.change(screen.getByLabelText("Nome del mondo"), { target: { value: "Nuovo" } });
     fireEvent.click(screen.getByRole("button", { name: "Crea mondo" }));
-    expect(await screen.findByText("Nuovo")).toBeTruthy();
+    expect(await screen.findByText("Nuovo", { selector: ".name" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Esci" }));
     expect(await screen.findByRole("heading", { name: "Entra al tavolo" })).toBeTruthy();
     await waitFor(() => { expect(calls).toContain("POST /api/auth/logout"); });
@@ -100,7 +101,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Esci" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Il servizio non è disponibile.");
-    expect(screen.getByRole("heading", { name: "I tuoi mondi" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "I miei mondi" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Accedi" })).toBeNull();
   });
 
@@ -116,7 +117,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Esci" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Impossibile raggiungere il server.");
-    expect(screen.getByRole("heading", { name: "I tuoi mondi" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "I miei mondi" })).toBeTruthy();
   });
 
   it("drops the alert from a failed first check once the user has signed in", async () => {
@@ -133,7 +134,7 @@ describe("App", () => {
     fireEvent.change(await screen.findByLabelText("Nome utente"), { target: { value: "Aldo" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "una-password-lunga" } });
     fireEvent.click(screen.getByRole("button", { name: "Accedi" }));
-    expect(await screen.findByRole("heading", { name: "I tuoi mondi" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "I miei mondi" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

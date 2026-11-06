@@ -39,7 +39,6 @@ export function worldStructureRoutes(app: FastifyInstance, db: Database, hub: Ta
     const created = await hub.serial(atlasQueueKey(access.worldId), () => createElement(db, access.worldId, params.data.collection, input));
     if (created === "parent-invalid") return fail(reply, 400, "world.parent-invalid");
     if (created === "placement-invalid") return fail(reply, 400, "world.placement-invalid");
-    if (created === "placement-required") return fail(reply, 400, "world.placement-required");
     return reply.code(201).send(created);
   });
 
